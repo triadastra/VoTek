@@ -1,4 +1,5 @@
 import type { LngLat } from '../map/types'
+import { MicStreamer, PlaybackQueue } from './audio'
 
 // The VisionCore owns the camera and the link to the broker. Transport is a WebSocket today;
 // a WebRTC transport can drop in behind this same interface (see ARCHITECTURE.md). The app
@@ -9,12 +10,16 @@ export interface GuideMessage {
   text: string
   /** true while the guide is still streaming this message. */
   partial?: boolean
+  /** false when the guide is already speaking this via native Gemini audio (don't double-speak). */
+  speak?: boolean
 }
 
 export interface VisionCoreEvents {
   onStatus?: (status: VisionStatus) => void
   onMessage?: (msg: GuideMessage) => void
   onError?: (err: string) => void
+  /** Fired when we learn whether this is a live Gemini-audio session. */
+  onLive?: (live: boolean) => void
 }
 
 export type VisionStatus = 'idle' | 'connecting' | 'live' | 'error'
@@ -47,8 +52,22 @@ export class VisionCore {
   private context: VisionContext | null = null
   private closed = false
   private httpBusy = false
+  private mic: MicStreamer | null = null
+  private player = new PlaybackQueue()
+  private serverAudio = false // true once the broker says it's a live-audio (Gemini) session
+  private micMuted = false
 
   constructor(private events: VisionCoreEvents = {}) {}
+
+  /** Is the guide speaking with native Gemini audio (vs. browser TTS)? */
+  hasLiveAudio() {
+    return this.serverAudio
+  }
+
+  setMicMuted(m: boolean) {
+    this.micMuted = m
+    this.mic?.setMuted(m)
+  }
 
   getStatus() {
     return this.status
@@ -113,8 +132,30 @@ export class VisionCore {
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data)
-        if (msg.type === 'guide') {
-          this.events.onMessage?.({ role: 'guide', text: msg.text, partial: msg.partial })
+        switch (msg.type) {
+          case 'hello':
+            // The broker tells us whether this is a live Gemini-audio session.
+            this.serverAudio = !!msg.audio
+            this.events.onLive?.(this.serverAudio)
+            if (this.serverAudio) this.startMic()
+            break
+          case 'guide':
+            // When Gemini streams its own audio, don't also browser-TTS the caption.
+            this.events.onMessage?.({
+              role: 'guide',
+              text: msg.text,
+              partial: msg.partial,
+              speak: !this.serverAudio,
+            })
+            break
+          case 'you':
+            // Transcript of what the user said (from streamed mic audio).
+            this.player.flush() // barge-in: stop the guide talking over the user
+            this.events.onMessage?.({ role: 'you', text: msg.text })
+            break
+          case 'audio':
+            this.player.enqueue(msg.data)
+            break
         }
       } catch {
         /* ignore malformed frames */
@@ -168,11 +209,27 @@ export class VisionCore {
     this.stopFrameLoop()
     this.stopHttpFallback()
     this.clearWsOpenTimer()
+    this.mic?.stop()
+    this.mic = null
+    this.player.stop()
     this.ws?.close()
     this.ws = null
     this.stream?.getTracks().forEach((t) => t.stop())
     this.stream = null
+    this.serverAudio = false
     this.setStatus('idle')
+  }
+
+  // Continuously stream the mic to the broker so Gemini's VAD can auto-answer.
+  private startMic() {
+    if (this.mic || !this.stream) return
+    this.mic = new MicStreamer((b64) => this.send({ type: 'audio', data: b64 }))
+    this.mic.setMuted(this.micMuted)
+    try {
+      this.mic.start(this.stream)
+    } catch {
+      this.mic = null
+    }
   }
 
   // ---- WebSocket frame loop ----

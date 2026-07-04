@@ -82,10 +82,12 @@ export async function guideOnce({ apiKey, context, jpegBase64, question }) {
  * onGuide(text, partial) callbacks.
  */
 export class GuideSession {
-  constructor({ apiKey, model, onGuide }) {
+  constructor({ apiKey, model, onGuide, onAudio, onUser }) {
     this.apiKey = apiKey
     this.model = model || 'gemini-2.0-flash-live-001'
-    this.onGuide = onGuide
+    this.onGuide = onGuide // (text, partial) — narration captions
+    this.onAudio = onAudio || (() => {}) // (base64 pcm16 24k) — Gemini's spoken audio
+    this.onUser = onUser || (() => {}) // (text) — transcript of what the user said
     this.context = null
     this.upstream = null
     this.mock = !apiKey
@@ -106,11 +108,14 @@ export class GuideSession {
   }
 
   sendSetup() {
+    // Full live config: spoken AUDIO output plus transcripts of both sides (for captions).
     const setup = {
       setup: {
         model: `models/${this.model}`,
-        generationConfig: { responseModalities: ['TEXT'] },
+        generationConfig: { responseModalities: ['AUDIO'] },
         systemInstruction: { parts: [{ text: buildSystemPrompt(this.context) }] },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
       },
     }
     this.upstream?.send(JSON.stringify(setup))
@@ -123,11 +128,22 @@ export class GuideSession {
     } catch {
       return
     }
-    const parts = msg?.serverContent?.modelTurn?.parts
+    const sc = msg?.serverContent
+    if (!sc) return
+
+    // Spoken audio + any text parts from the model.
+    const parts = sc.modelTurn?.parts
     if (Array.isArray(parts)) {
-      const text = parts.map((p) => p.text).filter(Boolean).join('')
-      if (text) this.onGuide(text, !msg?.serverContent?.turnComplete)
+      for (const p of parts) {
+        const mime = p.inlineData?.mimeType || ''
+        if (mime.startsWith('audio/') && p.inlineData?.data) this.onAudio(p.inlineData.data)
+        if (p.text) this.onGuide(p.text, !sc.turnComplete)
+      }
     }
+    // Captions from transcription of the model's own speech.
+    if (sc.outputTranscription?.text) this.onGuide(sc.outputTranscription.text, !sc.turnComplete)
+    // What the user said (from their streamed mic audio).
+    if (sc.inputTranscription?.text) this.onUser(sc.inputTranscription.text)
   }
 
   pushContext(context) {
@@ -173,6 +189,19 @@ export class GuideSession {
       JSON.stringify({
         realtimeInput: {
           mediaChunks: [{ mimeType: 'image/jpeg', data: jpegBase64 }],
+        },
+      }),
+    )
+  }
+
+  // Continuous mic audio (PCM16/16kHz). Streaming this enables Gemini's voice-activity
+  // detection to auto-answer when the user stops talking.
+  pushAudio(pcmBase64) {
+    if (this.mock || this.upstream?.readyState !== WebSocket.OPEN) return
+    this.upstream.send(
+      JSON.stringify({
+        realtimeInput: {
+          mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: pcmBase64 }],
         },
       }),
     )

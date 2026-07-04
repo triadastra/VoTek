@@ -10,12 +10,16 @@ export function GuideOverlay({
   onClose,
   attachVideo,
   onAsk,
+  liveMode,
+  onMicMute,
 }: {
   status: VisionStatus
   messages: GuideMessage[]
   onClose: () => void
   attachVideo: (el: HTMLVideoElement) => void
   onAsk: (question: string) => void
+  liveMode: boolean
+  onMicMute: (muted: boolean) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const recRef = useRef<Recognizer | null>(null)
@@ -24,16 +28,17 @@ export function GuideOverlay({
   const [muted, setMuted] = useState(isMuted())
   const [speaking, setSpeaking] = useState(false)
   const [listening, setListening] = useState(false)
+  const [micMuted, setMicMuted] = useState(false)
   const [interim, setInterim] = useState('')
 
   useEffect(() => {
     if (videoRef.current) attachVideo(videoRef.current)
   }, [attachVideo])
 
-  // Speak each new finalized guide line aloud.
+  // Speak each new finalized guide line aloud — unless Gemini is already speaking it (live audio).
   useEffect(() => {
     const last = messages[messages.length - 1]
-    if (!last || last.role !== 'guide' || last.partial) return
+    if (!last || last.role !== 'guide' || last.partial || last.speak === false) return
     if (last.text === spokenRef.current) return
     spokenRef.current = last.text
     speak(last.text, { onStart: () => setSpeaking(true), onEnd: () => setSpeaking(false) })
@@ -53,6 +58,14 @@ export function GuideOverlay({
     setGlobalMuted(m)
   }
 
+  // Live mode: the mic streams continuously (Gemini auto-answers) — the button mutes/unmutes it.
+  const toggleLiveMic = () => {
+    const m = !micMuted
+    setMicMuted(m)
+    onMicMute(m)
+  }
+
+  // Fallback mode: push-to-talk speech recognition.
   const toggleMic = () => {
     if (listening) {
       recRef.current?.stop()
@@ -119,21 +132,36 @@ export function GuideOverlay({
         <div className={`caption caption--${captionRole}`}>
           <span className="caption__tag">{captionRole === 'you' ? 'YOU' : 'GUIDE'}</span>
           <span className="caption__text">{caption}</span>
-          {speaking && !listening && (
+          {(speaking || (liveMode && caption && captionRole === 'guide')) && !listening && (
             <span className="caption__wave">
               <i /><i /><i /><i />
             </span>
           )}
         </div>
 
-        <button
-          className={`mic ${listening ? 'mic--on' : ''}`}
-          onClick={toggleMic}
-          aria-label={listening ? 'Stop listening' : 'Ask the guide'}
-        >
-          <Icon name="mic" size={26} />
-        </button>
-        <div className="mic__hint">{listening ? 'Listening — tap to stop' : 'Tap to ask'}</div>
+        {liveMode ? (
+          <>
+            <button
+              className={`mic ${micMuted ? 'mic--muted' : 'mic--live'}`}
+              onClick={toggleLiveMic}
+              aria-label={micMuted ? 'Unmute mic' : 'Mute mic'}
+            >
+              <Icon name={micMuted ? 'mute' : 'mic'} size={26} />
+            </button>
+            <div className="mic__hint">{micMuted ? 'Mic muted — tap to talk' : 'Live — just talk to me'}</div>
+          </>
+        ) : (
+          <>
+            <button
+              className={`mic ${listening ? 'mic--on' : ''}`}
+              onClick={toggleMic}
+              aria-label={listening ? 'Stop listening' : 'Ask the guide'}
+            >
+              <Icon name="mic" size={26} />
+            </button>
+            <div className="mic__hint">{listening ? 'Listening — tap to stop' : 'Tap to ask'}</div>
+          </>
+        )}
       </div>
     </div>
   )

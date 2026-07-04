@@ -107,16 +107,19 @@ const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/vision' })
 
 wss.on('connection', (client) => {
+  const send = (obj) => {
+    if (client.readyState === client.OPEN) client.send(JSON.stringify(obj))
+  }
   const guide = new GuideSession({
     apiKey: API_KEY,
     model: MODEL,
-    onGuide: (text, partial) => {
-      if (client.readyState === client.OPEN) {
-        client.send(JSON.stringify({ type: 'guide', text, partial }))
-      }
-    },
+    onGuide: (text, partial) => send({ type: 'guide', text, partial }),
+    onAudio: (data) => send({ type: 'audio', data }),
+    onUser: (text) => send({ type: 'you', text }),
   })
   guide.start()
+  // Tell the client up-front whether Gemini native audio is available (live vs mock).
+  send({ type: 'hello', audio: !!API_KEY, mode: API_KEY ? 'live' : 'mock' })
 
   client.on('message', (raw) => {
     let msg
@@ -137,6 +140,8 @@ wss.on('connection', (client) => {
       }
     } else if (msg.type === 'frame') {
       guide.pushFrame(msg.jpegBase64)
+    } else if (msg.type === 'audio') {
+      guide.pushAudio(msg.data)
     }
   })
 

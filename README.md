@@ -71,7 +71,10 @@ grants camera/GPS.
   Museums, Parks, Bars — as real POI pins (Overpass), with result & detail cards
 - ✅ Live high-accuracy **GPS** location dot + heading + accuracy ring
 - ✅ Photo-spot **circle overlays** (stubbed dataset) with distance + score in the place sheet
-- ✅ Camera guide overlay + vision core streaming frames to the broker
+- ✅ **Live AI guide** — streams camera **and mic audio** to Gemini Live; the model
+  **auto-answers** (voice-activity detection), speaks back in its own voice, with live
+  captions. Talk to it hands-free, or tap the mic. Falls back to browser TTS + push-to-talk
+  speech recognition (and an HTTP path) when Live/WebSocket isn't available.
 - ✅ **Precise location grounding** — the broker reverse-geocodes your GPS fix to a real place
   and feeds location + accuracy + heading + place name into the guide
 - ✅ Graceful **HTTPS handling** — off a secure origin, camera/GPS show a clear banner instead

@@ -48,6 +48,7 @@ export default function App() {
   const [basemap, setBasemap] = useState<Basemap>('map')
   const [guideOpen, setGuideOpen] = useState(false)
   const [visionStatus, setVisionStatus] = useState<VisionStatus>('idle')
+  const [liveMode, setLiveMode] = useState(false)
   const [messages, setMessages] = useState<GuideMessage[]>([])
   const [mode, setMode] = useState<'live' | 'mock' | null>(null)
   const [showInsecure, setShowInsecure] = useState(!window.isSecureContext)
@@ -205,6 +206,7 @@ export default function App() {
     }
     const core = new VisionCore({
       onStatus: setVisionStatus,
+      onLive: setLiveMode,
       onMessage: (msg) =>
         setMessages((prev) =>
           prev.length && prev[prev.length - 1].partial ? [...prev.slice(0, -1), msg] : [...prev, msg],
@@ -227,6 +229,7 @@ export default function App() {
     visionRef.current = null
     setGuideOpen(false)
     setVisionStatus('idle')
+    setLiveMode(false)
   }
 
   const attachVideo = useCallback((el: HTMLVideoElement) => {
@@ -304,6 +307,8 @@ export default function App() {
           onClose={stopGuide}
           attachVideo={attachVideo}
           onAsk={(q) => visionRef.current?.ask(q)}
+          liveMode={liveMode}
+          onMicMute={(m) => visionRef.current?.setMicMuted(m)}
         />
       )}
 
