@@ -1,22 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { getMapProvider } from './map/createMapProvider'
 import type { Basemap, LngLat, MapProvider, Place, PhotoSpot } from './map/types'
 import { FALLBACK_CENTER, useGeolocation } from './location/useGeolocation'
 import { useTrail } from './location/useTrail'
 import { photoSpotsNear } from './data/photoSpots'
 import { getHealth, getProviders, getRoute, searchPlaces, type ProviderInfo, type RouteResult } from './data/api'
-import { VisionCore, type GuideMessage, type LensData, type VisionStatus } from './vision/visionCore'
+import type { VisionCore, GuideMessage, LensData, VisionStatus } from './vision/visionCore'
 import { warmUpSpeech } from './vision/speech'
 import { SearchBar } from './components/SearchBar'
 import { MapControls } from './components/MapControls'
 import { PlaceSheet, type SheetTarget } from './components/PlaceSheet'
-import { GuideOverlay } from './components/GuideOverlay'
 import { InsecureBanner } from './components/InsecureBanner'
 import { RouteBanner } from './components/RouteBanner'
 import { TrailChip } from './components/TrailChip'
-import { LensView } from './components/LensView'
-import { SettingsSheet, type Selection } from './components/SettingsSheet'
+import type { Selection } from './components/SettingsSheet'
 import { Icon } from './ui/Icon'
+
+// The camera guide, Lens focus screen, and Settings sheet aren't needed at first paint — they
+// load on demand (first time they open), keeping the initial download to the map + shell.
+const GuideOverlay = lazy(() => import('./components/GuideOverlay').then((m) => ({ default: m.GuideOverlay })))
+const LensView = lazy(() => import('./components/LensView').then((m) => ({ default: m.LensView })))
+const SettingsSheet = lazy(() => import('./components/SettingsSheet').then((m) => ({ default: m.SettingsSheet })))
 
 const SEL_KEY = 'votek.selection'
 function loadSelection(): Selection | null {
@@ -101,20 +105,23 @@ export default function App() {
   useEffect(() => {
     let disposed = false
     if (!mapRef.current) return
-    getMapProvider('maplibre')({ container: mapRef.current, center, zoom: 15 }).then((p) => {
-      if (disposed) {
-        p.destroy()
-        return
-      }
-      providerRef.current = p
-      setMapReady(true)
-      p.onPhotoSpotTap((s) => setSelected({ kind: 'spot', spot: s }))
-      p.onPlaceTap((place) => {
-        p.setSelectedPlace(place)
-        setSelected({ kind: 'place', place })
-      })
-      p.onMoveEnd(() => {
-        followRef.current = false
+    getMapProvider('maplibre').then((factory) => {
+      if (disposed || !mapRef.current) return
+      factory({ container: mapRef.current, center, zoom: 15 }).then((p) => {
+        if (disposed) {
+          p.destroy()
+          return
+        }
+        providerRef.current = p
+        setMapReady(true)
+        p.onPhotoSpotTap((s) => setSelected({ kind: 'spot', spot: s }))
+        p.onPlaceTap((place) => {
+          p.setSelectedPlace(place)
+          setSelected({ kind: 'place', place })
+        })
+        p.onMoveEnd(() => {
+          followRef.current = false
+        })
       })
     })
     return () => {
@@ -243,6 +250,7 @@ export default function App() {
         /* declined compass */
       }
     }
+    const { VisionCore } = await import('./vision/visionCore')
     const core = new VisionCore({
       onStatus: setVisionStatus,
       onLive: setLiveMode,
@@ -346,32 +354,34 @@ export default function App() {
         </div>
       </div>
 
-      {guideOpen && (
-        <GuideOverlay
-          status={visionStatus}
-          messages={messages}
-          onClose={stopGuide}
-          attachVideo={attachVideo}
-          onAsk={(q) => visionRef.current?.ask(q)}
-          liveMode={liveMode}
-          onMicMute={(m) => visionRef.current?.setMicMuted(m)}
-          onSettings={() => setSettingsOpen(true)}
-        />
-      )}
+      <Suspense fallback={null}>
+        {guideOpen && (
+          <GuideOverlay
+            status={visionStatus}
+            messages={messages}
+            onClose={stopGuide}
+            attachVideo={attachVideo}
+            onAsk={(q) => visionRef.current?.ask(q)}
+            liveMode={liveMode}
+            onMicMute={(m) => visionRef.current?.setMicMuted(m)}
+            onSettings={() => setSettingsOpen(true)}
+          />
+        )}
 
-      {lens && <LensView lens={lens} onClose={() => setLens(null)} />}
+        {lens && <LensView lens={lens} onClose={() => setLens(null)} />}
 
-      {settingsOpen && (
-        <SettingsSheet
-          providers={providers}
-          selection={selection}
-          onSelect={(s) => {
-            setSelection(s)
-            visionRef.current?.setSelection(s)
-          }}
-          onClose={() => setSettingsOpen(false)}
-        />
-      )}
+        {settingsOpen && (
+          <SettingsSheet
+            providers={providers}
+            selection={selection}
+            onSelect={(s) => {
+              setSelection(s)
+              visionRef.current?.setSelection(s)
+            }}
+            onClose={() => setSettingsOpen(false)}
+          />
+        )}
+      </Suspense>
 
       {selected && (
         <PlaceSheet

@@ -1,4 +1,5 @@
 import maplibregl, { Map as MlMap, GeoJSONSource, Marker } from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css' // bundled into the lazy map chunk, not the initial CSS
 import type { Basemap, Bounds, LngLat, MapProvider, MapProviderOptions, Place, PhotoSpot } from './types'
 import { iconSvg, type IconName } from '../ui/icons'
 

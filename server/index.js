@@ -3,6 +3,7 @@ import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import express from 'express'
+import compression from 'compression'
 import { WebSocketServer } from 'ws'
 import { GuideSession, guideOnce, identify, generateContent, resolveLiveModel, probeProvider } from './gemini.js'
 import { availableProviders } from './altproviders.js'
@@ -34,6 +35,9 @@ const KEYS = {
 }
 
 const app = express()
+// Gzip everything (the built JS bundle is ~1MB raw → ~280KB gzipped). Without this the
+// broker shipped the whole bundle uncompressed, which was the main cause of slow loads.
+app.use(compression())
 app.use(express.json({ limit: '6mb' })) // frames arrive as base64 JPEG
 
 // Which AI providers are available (have a key) + their model lists, for the client selector.
@@ -150,9 +154,22 @@ const WEB_DIST = process.env.WEB_DIST
     : join(__dirname, '..', 'web', 'dist')
 
 if (existsSync(WEB_DIST)) {
-  app.use(express.static(WEB_DIST))
+  app.use(
+    express.static(WEB_DIST, {
+      // Vite fingerprints asset filenames, so /assets/* can be cached forever. index.html
+      // must stay uncached so a new deploy is picked up immediately.
+      setHeaders: (res, path) => {
+        if (path.includes(`${join('', 'assets', '')}`) || /\.[0-9a-f]{8,}\.(js|css)$/.test(path)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        } else if (path.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache')
+        }
+      },
+    }),
+  )
   // SPA fallback: let the client router handle non-API, non-asset routes.
   app.get(/^\/(?!api\/|vision).*/, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache')
     res.sendFile(join(WEB_DIST, 'index.html'))
   })
   console.log(`Serving web app from ${WEB_DIST}`)
