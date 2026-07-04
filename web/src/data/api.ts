@@ -1,4 +1,4 @@
-import type { Bounds, Place } from '../map/types'
+import type { Bounds, LngLat, Place } from '../map/types'
 
 // Thin client for the broker's search/reverse endpoints.
 
@@ -15,6 +15,33 @@ export async function searchPlaces(q: string, bounds?: Bounds, bounded = false):
     return (data.results ?? []) as Place[]
   } catch {
     return []
+  }
+}
+
+export interface RouteResult {
+  mode: string
+  distanceM: number
+  durationS: number
+  coords: LngLat[]
+}
+
+export async function getRoute(
+  from: LngLat,
+  to: LngLat,
+  mode: 'foot' | 'bike' | 'car' = 'foot',
+): Promise<RouteResult | null> {
+  const params = new URLSearchParams({
+    from: `${from.lng},${from.lat}`,
+    to: `${to.lng},${to.lat}`,
+    mode,
+  })
+  try {
+    const res = await fetch(`/api/route?${params}`)
+    if (!res.ok) return null
+    const data = await res.json()
+    return (data.route ?? null) as RouteResult | null
+  } catch {
+    return null
   }
 }
 

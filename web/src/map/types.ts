@@ -60,6 +60,9 @@ export interface MapProvider {
   /** Highlight one place (drops a big pin, e.g. the selected search result). */
   setSelectedPlace(place: Place | null): void
 
+  /** Draw a routed path (list of points) for guidance, or clear it with null. */
+  setRoute(coords: LngLat[] | null): void
+
   /** Switch between the map and satellite basemaps. */
   setBasemap(kind: Basemap): void
   zoomIn(): void

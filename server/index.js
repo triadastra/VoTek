@@ -7,6 +7,7 @@ import { WebSocketServer } from 'ws'
 import { GuideSession } from './gemini.js'
 import { reverseGeocode } from './geocode.js'
 import { searchPlaces } from './search.js'
+import { getRoute } from './routing.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -47,6 +48,16 @@ app.get('/api/search', async (req, res) => {
   const bounded = req.query.bounded === '1'
   const results = await searchPlaces(q, { bbox: bbox?.length === 4 ? bbox : undefined, bounded })
   res.json({ results })
+})
+
+// Real route between two points (default walking) for on-map guidance.
+app.get('/api/route', async (req, res) => {
+  const parse = (s) => {
+    const [lng, lat] = String(s || '').split(',').map(Number)
+    return Number.isNaN(lng) || Number.isNaN(lat) ? null : { lng, lat }
+  }
+  const route = await getRoute(parse(req.query.from), parse(req.query.to), String(req.query.mode || 'foot'))
+  res.json({ route })
 })
 
 // Reverse geocode a point to a human place name (used by the UI for tapped locations).

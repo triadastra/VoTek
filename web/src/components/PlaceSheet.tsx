@@ -1,4 +1,5 @@
 import type { LngLat, Place, PhotoSpot } from '../map/types'
+import { Icon } from '../ui/Icon'
 
 function distanceM(a: LngLat, b: LngLat): number {
   const R = 6371000
@@ -52,15 +53,19 @@ export function PlaceSheet({
               {userPos && <span>· {fmtDist(distanceM(userPos, pos))} away</span>}
             </div>
           </div>
-          {isSpot && <div className="sheet__score">★ {Math.round(target.spot!.score * 100)}%</div>}
+          {isSpot && (
+            <div className="sheet__score">
+              <Icon name="star" size={13} /> {Math.round(target.spot!.score * 100)}%
+            </div>
+          )}
         </div>
         {sub && <div className="sheet__blurb">{sub}</div>}
         <div className="sheet__actions">
           <button className="sheet__go" onClick={() => onNavigate(pos)}>
-            Directions
+            <Icon name="route" size={18} /> Directions
           </button>
           <button className="sheet__guide" onClick={onGuide}>
-            ◐ Guide me here
+            <Icon name="navigation" size={16} /> Guide me here
           </button>
         </div>
       </div>

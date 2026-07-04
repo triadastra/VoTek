@@ -34,7 +34,7 @@ button { font: inherit; cursor: pointer; }
 .maplibregl-ctrl-attrib { font-size: 10px; opacity: 0.6; }
 .maplibregl-ctrl-bottom-right { margin-bottom: 2px; }
 
-/* ---- User location dot ---- */
+/* ---- User location dot + iPhone orientation beam ---- */
 .user-dot { width: 22px; height: 22px; position: relative; }
 .user-dot__core {
   position: absolute; inset: 5px; border-radius: 50%;
@@ -46,6 +46,17 @@ button { font: inherit; cursor: pointer; }
   background: rgba(66, 133, 244, 0.3); animation: pulse 2.4s ease-out infinite;
 }
 @keyframes pulse { 0% { transform: scale(0.6); opacity: 0.7; } 100% { transform: scale(2.6); opacity: 0; } }
+/* The heading beam: a soft cone pointing "up" (north); the marker rotates it to compass bearing.
+   Hidden until we have a heading (Apple-Maps style). */
+.user-dot__beam {
+  position: absolute; left: 50%; top: 50%; width: 46px; height: 46px;
+  transform: translate(-50%, -100%);
+  background: conic-gradient(from -25deg at 50% 100%,
+    rgba(66,133,244,0) 0deg, rgba(66,133,244,0.45) 25deg, rgba(66,133,244,0) 50deg);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none;
+}
+.user-dot--heading .user-dot__beam { opacity: 1; }
 
 /* ---- POI pins (search results) ---- */
 .poi-pin {
@@ -54,7 +65,8 @@ button { font: inherit; cursor: pointer; }
   background: #fff; border: 1.5px solid var(--stroke);
   box-shadow: var(--shadow); display: grid; place-items: center; padding: 0;
 }
-.poi-pin__icon { transform: rotate(-45deg); font-size: 15px; line-height: 1; }
+.poi-pin { color: var(--brand); }
+.poi-pin__icon { transform: rotate(-45deg); display: flex; }
 .poi-pin:active { transform: rotate(45deg) scale(0.92); }
 
 /* ---- Selected place pin ---- */
@@ -62,7 +74,7 @@ button { font: inherit; cursor: pointer; }
 .sel-pin__head {
   width: 40px; height: 40px; border-radius: 50%;
   background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff;
-  display: grid; place-items: center; font-size: 20px;
+  display: grid; place-items: center;
   box-shadow: var(--shadow); border: 2px solid #fff;
 }
 .sel-pin__stem { width: 2px; height: 10px; background: var(--brand-2); }
@@ -76,7 +88,7 @@ button { font: inherit; cursor: pointer; }
   padding: 12px 14px; border-radius: 14px;
   background: var(--panel); box-shadow: var(--shadow);
 }
-.search__icon { font-size: 15px; opacity: 0.7; }
+.search__icon { display: flex; align-items: center; color: var(--ink-dim); }
 .search__input { flex: 1; border: none; outline: none; background: none; font-size: 16px; color: var(--ink); }
 .search__input::placeholder { color: var(--ink-dim); }
 .search__clear {
@@ -139,17 +151,56 @@ button { font: inherit; cursor: pointer; }
   display: flex; flex-direction: column; align-items: center; gap: 8px;
 }
 .guide-btn {
-  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 16px; border-radius: 16px; border: none; color: #fff; font-weight: 700; font-size: 16px;
-  background: linear-gradient(135deg, var(--brand), var(--brand-2));
-  box-shadow: 0 8px 24px rgba(66, 133, 244, 0.4);
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 8px 22px 8px 8px; border-radius: 999px; border: none;
+  color: #fff; font-weight: 650; font-size: 16.5px; letter-spacing: 0.2px;
+  background: linear-gradient(180deg, #6d9bff 0%, #4f7bef 46%, #4168d8 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 1px rgba(20, 40, 90, 0.35),
+    0 10px 26px -8px rgba(64, 104, 216, 0.75),
+    0 2px 6px rgba(20, 30, 50, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
+.guide-btn:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 16px -8px rgba(64, 104, 216, 0.7);
+}
+.guide-btn__ic {
+  width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.guide-btn__ic svg { margin-left: 1px; }
+.guide-btn__label { padding-right: 2px; }
+
+/* ---- Route banner ---- */
+.routebar {
+  position: absolute; left: 12px; right: 12px; top: calc(var(--safe-top) + 12px); z-index: 6;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 14px; background: var(--panel); box-shadow: var(--shadow);
+}
+.routebar__icon {
+  width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center;
+  background: rgba(66, 133, 244, 0.12); color: var(--brand);
+}
+.routebar__main { flex: 1; line-height: 1.25; }
+.routebar__time { font-weight: 800; font-size: 16px; }
+.routebar__sub { font-size: 12.5px; color: var(--ink-dim); display: flex; align-items: center; gap: 5px; }
+.routebar__x { border: none; background: rgba(20,30,50,0.08); color: var(--ink-dim); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; }
 .guide-btn:active { transform: translateY(1px); }
 .guide-btn__badge {
-  font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px;
-  padding: 3px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.22);
+  font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 4px 9px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16); color: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
-.guide-btn__badge.live { background: rgba(35, 193, 122, 0.9); }
+.guide-btn__badge.live {
+  background: rgba(35, 193, 122, 0.95); color: #fff; box-shadow: none;
+}
 .dock__hint {
   font-size: 12px; color: var(--ink-dim); background: var(--panel-glass); backdrop-filter: blur(10px);
   padding: 5px 12px; border-radius: 999px; box-shadow: var(--shadow);
@@ -170,13 +221,15 @@ button { font: inherit; cursor: pointer; }
 .sheet__meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; font-size: 13px; color: var(--ink-dim); }
 .sheet__cat { text-transform: capitalize; color: var(--accent); font-weight: 700; }
 .sheet__score {
-  flex: 0 0 auto; padding: 6px 11px; border-radius: 999px; font-size: 13px; font-weight: 800;
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: 999px; font-size: 13px; font-weight: 800;
   background: rgba(139, 91, 255, 0.14); color: var(--accent);
 }
 .sheet__blurb { margin-top: 12px; color: var(--ink-dim); }
 .sheet__actions { display: flex; gap: 10px; margin-top: 18px; }
 .sheet__go, .sheet__guide {
-  flex: 1; padding: 14px; border: none; border-radius: 13px; font-weight: 700; font-size: 15px;
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px; border: none; border-radius: 13px; font-weight: 700; font-size: 15px;
 }
 .sheet__go { background: var(--brand); color: #fff; }
 .sheet__guide { background: rgba(122, 77, 255, 0.12); color: var(--accent); }

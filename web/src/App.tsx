@@ -3,13 +3,25 @@ import { getMapProvider } from './map/createMapProvider'
 import type { Basemap, LngLat, MapProvider, Place, PhotoSpot } from './map/types'
 import { FALLBACK_CENTER, useGeolocation } from './location/useGeolocation'
 import { photoSpotsNear } from './data/photoSpots'
-import { getHealth, searchPlaces } from './data/api'
+import { getHealth, getRoute, searchPlaces, type RouteResult } from './data/api'
 import { VisionCore, type GuideMessage, type VisionStatus } from './vision/visionCore'
 import { SearchBar } from './components/SearchBar'
 import { MapControls } from './components/MapControls'
 import { PlaceSheet, type SheetTarget } from './components/PlaceSheet'
 import { GuideOverlay } from './components/GuideOverlay'
 import { InsecureBanner } from './components/InsecureBanner'
+import { RouteBanner } from './components/RouteBanner'
+import { Icon } from './ui/Icon'
+
+function haversineM(a: LngLat, b: LngLat): number {
+  const R = 6371000
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180
+  const la1 = (a.lat * Math.PI) / 180
+  const la2 = (b.lat * Math.PI) / 180
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
 
 function boundsOf(points: LngLat[]) {
   const lngs = points.map((p) => p.lng)
@@ -36,6 +48,8 @@ export default function App() {
   const [messages, setMessages] = useState<GuideMessage[]>([])
   const [mode, setMode] = useState<'live' | 'mock' | null>(null)
   const [showInsecure, setShowInsecure] = useState(!window.isSecureContext)
+  const [showSpots, setShowSpots] = useState(false)
+  const [route, setRoute] = useState<RouteResult | null>(null)
 
   const center = geo.position ?? FALLBACK_CENTER
 
@@ -78,7 +92,6 @@ export default function App() {
     if (followRef.current) p.flyTo(geo.position)
     const nearby = photoSpotsNear(geo.position)
     setSpots(nearby)
-    p.setPhotoSpots(nearby)
     visionRef.current?.updateContext({
       location: geo.position,
       accuracy: geo.accuracy,
@@ -86,6 +99,12 @@ export default function App() {
       nearby: nearby.map((s) => s.name),
     })
   }, [geo.position, geo.heading, geo.accuracy])
+
+  // Photo-spot circles are hidden by default (keeps the map clean, Apple-Maps style) and
+  // only shown when the user taps the Photo spots chip.
+  useEffect(() => {
+    providerRef.current?.setPhotoSpots(showSpots ? spots : [])
+  }, [showSpots, spots])
 
   const recenter = () => {
     followRef.current = true
@@ -97,7 +116,8 @@ export default function App() {
     const p = providerRef.current
     if (!p) return
     if (q === '__photospots__') {
-      // "Photo spots" chip: frame the ranked vantage points already on the map.
+      // "Photo spots" chip: reveal the ranked vantage points and frame them.
+      setShowSpots(true)
       if (spots.length) p.fitBounds(boundsOf(spots.map((s) => s.position)))
       return
     }
@@ -119,8 +139,44 @@ export default function App() {
 
   const clearSearch = () => {
     setResults([])
+    setShowSpots(false)
     providerRef.current?.setPlaces([])
     providerRef.current?.setSelectedPlace(null)
+  }
+
+  // --- Directions: fetch a real route and draw it ---
+  const navigateTo = useCallback(
+    async (dest: LngLat) => {
+      const p = providerRef.current
+      setSelected(null)
+      if (!p) return
+      if (!geo.position) {
+        // No fix yet — just center on the destination.
+        followRef.current = false
+        p.flyTo(dest, 17)
+        return
+      }
+      followRef.current = false
+      const r = await getRoute(geo.position, dest, 'foot')
+      if (r && r.coords.length > 1) {
+        p.setRoute(r.coords)
+        setRoute(r)
+        p.fitBounds(boundsOf(r.coords), 110)
+      } else {
+        // Routing service unavailable — draw a straight-line beeline so guidance still shows.
+        const coords = [geo.position, dest]
+        const distanceM = haversineM(geo.position, dest)
+        p.setRoute(coords)
+        setRoute({ mode: 'foot', distanceM, durationS: distanceM / 1.4, coords })
+        p.fitBounds(boundsOf(coords), 110)
+      }
+    },
+    [geo.position],
+  )
+
+  const clearRoute = () => {
+    setRoute(null)
+    providerRef.current?.setRoute(null)
   }
 
   // --- Guide session ---
@@ -171,6 +227,8 @@ export default function App() {
 
       {showInsecure && <InsecureBanner onDismiss={() => setShowInsecure(false)} />}
 
+      {route && !showInsecure && <RouteBanner route={route} onClear={clearRoute} />}
+
       <SearchBar
         results={results}
         onSearch={runSearch}
@@ -192,9 +250,12 @@ export default function App() {
 
       <div className="dock">
         <button className="guide-btn" onClick={startGuide}>
-          ◐ Start guide
+          <span className="guide-btn__ic">
+            <Icon name="navigation" size={19} />
+          </span>
+          <span className="guide-btn__label">Start guide</span>
           {mode && (
-            <span className={`guide-btn__badge ${mode}`}>{mode === 'live' ? 'AI live' : 'demo'}</span>
+            <span className={`guide-btn__badge ${mode}`}>{mode === 'live' ? 'AI live' : 'Demo'}</span>
           )}
         </button>
         <div className="dock__hint">
@@ -220,11 +281,7 @@ export default function App() {
             setSelected(null)
             providerRef.current?.setSelectedPlace(null)
           }}
-          onNavigate={(pos) => {
-            followRef.current = false
-            providerRef.current?.flyTo(pos, 17)
-            setSelected(null)
-          }}
+          onNavigate={navigateTo}
           onGuide={() => {
             setSelected(null)
             startGuide()

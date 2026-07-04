@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Place } from '../map/types'
+import { Icon } from '../ui/Icon'
+import type { IconName } from '../ui/icons'
 
-const CATEGORIES = [
-  { label: 'Photo spots', q: '__photospots__', icon: '📸' },
-  { label: 'Coffee', q: 'coffee', icon: '☕' },
-  { label: 'Food', q: 'restaurant', icon: '🍽️' },
-  { label: 'Hotels', q: 'hotel', icon: '🛏️' },
-  { label: 'Museums', q: 'museum', icon: '🏛️' },
-  { label: 'Parks', q: 'park', icon: '🌳' },
-  { label: 'Bars', q: 'bar', icon: '🍸' },
+const CATEGORIES: { label: string; q: string; icon: IconName }[] = [
+  { label: 'Photo spots', q: '__photospots__', icon: 'camera' },
+  { label: 'Coffee', q: 'coffee', icon: 'coffee' },
+  { label: 'Food', q: 'restaurant', icon: 'food' },
+  { label: 'Hotels', q: 'hotel', icon: 'hotel' },
+  { label: 'Museums', q: 'museum', icon: 'museum' },
+  { label: 'Parks', q: 'park', icon: 'park' },
+  { label: 'Bars', q: 'bar', icon: 'bar' },
 ]
 
 export function SearchBar({
@@ -42,7 +44,9 @@ export function SearchBar({
   return (
     <div className="search">
       <div className="search__bar">
-        <span className="search__icon">🔍</span>
+        <span className="search__icon">
+          <Icon name="search" size={18} />
+        </span>
         <input
           className="search__input"
           placeholder="Search places, food, sights…"
@@ -63,7 +67,7 @@ export function SearchBar({
             }}
             aria-label="Clear"
           >
-            ✕
+            <Icon name="x" size={14} />
           </button>
         )}
       </div>
@@ -90,7 +94,7 @@ export function SearchBar({
               else onCategory(c.q, c.label)
             }}
           >
-            <span>{c.icon}</span>
+            <Icon name={c.icon} size={15} />
             {c.label}
           </button>
         ))}

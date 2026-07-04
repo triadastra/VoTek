@@ -1,5 +1,6 @@
 import maplibregl, { Map as MlMap, GeoJSONSource, Marker } from 'maplibre-gl'
 import type { Basemap, Bounds, LngLat, MapProvider, MapProviderOptions, Place, PhotoSpot } from './types'
+import { iconSvg, type IconName } from '../ui/icons'
 
 // CARTO Voyager — a clean, free, key-less basemap that reads like Google Maps.
 // ESRI World Imagery — free satellite tiles. Both toggled via layer visibility.
@@ -25,6 +26,7 @@ const BASE_STYLE: maplibregl.StyleSpecification = {
 
 const ACCURACY_SOURCE = 'gps-accuracy'
 const SPOTS_SOURCE = 'photo-spots'
+const ROUTE_SOURCE = 'route'
 
 function circlePolygon(center: LngLat, radiusM: number, steps = 48): GeoJSON.Feature {
   const coords: [number, number][] = []
@@ -50,24 +52,23 @@ function spotsFC(spots: PhotoSpot[]): GeoJSON.FeatureCollection {
   }
 }
 
-const CATEGORY_ICON: Record<string, string> = {
-  restaurant: '🍽️',
-  cafe: '☕',
-  coffee: '☕',
-  bar: '🍸',
-  hotel: '🛏️',
-  lodging: '🛏️',
-  museum: '🏛️',
-  park: '🌳',
-  shop: '🛍️',
-  viewpoint: '📸',
-  attraction: '⭐',
+const CATEGORY_ICON: Record<string, IconName> = {
+  restaurant: 'food',
+  cafe: 'coffee',
+  coffee: 'coffee',
+  bar: 'bar',
+  hotel: 'hotel',
+  lodging: 'hotel',
+  museum: 'museum',
+  park: 'park',
+  viewpoint: 'camera',
+  attraction: 'star',
 }
 
-function iconFor(category?: string): string {
-  if (!category) return '📍'
+function iconFor(category?: string): IconName {
+  if (!category) return 'pin'
   const key = Object.keys(CATEGORY_ICON).find((k) => category.toLowerCase().includes(k))
-  return key ? CATEGORY_ICON[key] : '📍'
+  return key ? CATEGORY_ICON[key] : 'pin'
 }
 
 export async function createMapLibreProvider(opts: MapProviderOptions): Promise<MapProvider> {
@@ -82,7 +83,11 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
 
   const dotEl = document.createElement('div')
   dotEl.className = 'user-dot'
-  dotEl.innerHTML = '<span class="user-dot__pulse"></span><span class="user-dot__core"></span>'
+  dotEl.innerHTML =
+    '<span class="user-dot__beam"></span>' +
+    '<span class="user-dot__pulse"></span>' +
+    '<span class="user-dot__core"></span>'
+  // rotationAlignment 'map' keeps the heading beam locked to compass bearing as the map moves.
   const userMarker = new Marker({ element: dotEl, rotationAlignment: 'map' })
 
   const placeMarkers: Marker[] = []
@@ -106,6 +111,23 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
     type: 'line',
     source: ACCURACY_SOURCE,
     paint: { 'line-color': '#4285f4', 'line-opacity': 0.4, 'line-width': 1 },
+  })
+
+  // Route line (casing + colored line, drawn above the basemap).
+  map.addSource(ROUTE_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+  map.addLayer({
+    id: 'route-casing',
+    type: 'line',
+    source: ROUTE_SOURCE,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#1b57c4', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 7, 18, 13] },
+  })
+  map.addLayer({
+    id: 'route-line',
+    type: 'line',
+    source: ROUTE_SOURCE,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#4285f4', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 9] },
   })
 
   // Photo-spot circles
@@ -154,7 +176,13 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
     },
     setUserLocation(pos, headingDeg, accuracyM) {
       userMarker.setLngLat([pos.lng, pos.lat]).addTo(map)
-      if (headingDeg != null) userMarker.setRotation(headingDeg)
+      // Show the orientation beam only when we actually have a compass heading.
+      if (headingDeg != null && !Number.isNaN(headingDeg)) {
+        dotEl.classList.add('user-dot--heading')
+        userMarker.setRotation(headingDeg)
+      } else {
+        dotEl.classList.remove('user-dot--heading')
+      }
       const accSrc = map.getSource(ACCURACY_SOURCE) as GeoJSONSource | undefined
       accSrc?.setData(
         accuracyM && accuracyM > 0
@@ -175,7 +203,7 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
       for (const p of places) {
         const el = document.createElement('button')
         el.className = 'poi-pin'
-        el.innerHTML = `<span class="poi-pin__icon">${iconFor(p.category)}</span>`
+        el.innerHTML = `<span class="poi-pin__icon">${iconSvg(iconFor(p.category), { size: 15, stroke: 2.2 })}</span>`
         el.onclick = (ev) => {
           ev.stopPropagation()
           placeTapCb?.(p)
@@ -193,10 +221,24 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
       if (!place) return
       const el = document.createElement('div')
       el.className = 'sel-pin'
-      el.innerHTML = `<span class="sel-pin__head">${iconFor(place.category)}</span><span class="sel-pin__stem"></span>`
+      el.innerHTML =
+        `<span class="sel-pin__head">${iconSvg(iconFor(place.category), { size: 20, stroke: 2.2 })}</span>` +
+        `<span class="sel-pin__stem"></span>`
       selectedMarker = new Marker({ element: el, anchor: 'bottom' })
         .setLngLat([place.position.lng, place.position.lat])
         .addTo(map)
+    },
+    setRoute(coords) {
+      const src = map.getSource(ROUTE_SOURCE) as GeoJSONSource | undefined
+      if (!coords || coords.length < 2) {
+        src?.setData({ type: 'FeatureCollection', features: [] })
+        return
+      }
+      src?.setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: coords.map((c) => [c.lng, c.lat]) },
+        properties: {},
+      })
     },
     setBasemap(kind: Basemap) {
       map.setLayoutProperty('satellite', 'visibility', kind === 'satellite' ? 'visible' : 'none')
