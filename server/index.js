@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import express from 'express'
 import { WebSocketServer } from 'ws'
-import { GuideSession } from './gemini.js'
+import { GuideSession, guideOnce } from './gemini.js'
 import { reverseGeocode } from './geocode.js'
 import { searchPlaces } from './search.js'
 import { getRoute } from './routing.js'
@@ -26,7 +26,7 @@ const API_KEY = process.env.GEMINI_API_KEY || ''
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-live-001'
 
 const app = express()
-app.use(express.json())
+app.use(express.json({ limit: '6mb' })) // frames arrive as base64 JPEG
 
 // Health / mode. The client can use this to show whether the real guide is wired up.
 app.get('/api/health', (_req, res) => {
@@ -37,6 +37,16 @@ app.get('/api/health', (_req, res) => {
 // so the raw key never leaves the server. Stubbed here.
 app.post('/api/session-token', (_req, res) => {
   res.json({ token: null, mode: API_KEY ? 'live' : 'mock' })
+})
+
+// HTTP guide fallback — one narration turn from a frame + context. Used by the client when
+// the realtime vision WebSocket can't connect (some hosts don't proxy WebSocket upgrades).
+app.post('/api/guide', async (req, res) => {
+  const ctx = req.body?.context || {}
+  let place = ctx.place
+  if (!place && ctx.location) place = await reverseGeocode(ctx.location.lat, ctx.location.lng)
+  const text = await guideOnce({ apiKey: API_KEY, context: { ...ctx, place }, jpegBase64: req.body?.jpegBase64 })
+  res.json({ text })
 })
 
 // Place / category search, biased to the current map viewport (bbox=w,s,e,n).

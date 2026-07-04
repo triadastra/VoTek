@@ -27,6 +27,49 @@ export function buildSystemPrompt(context) {
     .join(' ')
 }
 
+// ---- Single-shot guide (HTTP fallback when the realtime WebSocket can't connect) ----
+// Uses the standard Gemini REST vision model, which is more broadly reachable than the Live API.
+const REST_MODEL = 'gemini-2.0-flash'
+const MOCK_LINES = [
+  'I can see what you see — let me tell you about this place.',
+  'Notice the details around you; each one has a small story.',
+  'For a great photo, step to the side and let the light lead the eye.',
+  'This spot rewards a slower look. Take it in.',
+  '(Add a GEMINI_API_KEY to the broker to hear the real, live guide.)',
+]
+let mockCursor = 0
+
+export async function guideOnce({ apiKey, context, jpegBase64 }) {
+  if (!apiKey) {
+    const place = context?.place
+    const line =
+      mockCursor === 0 && place
+        ? `You're at ${place}. I can see what you see — let's explore.`
+        : MOCK_LINES[mockCursor % MOCK_LINES.length]
+    mockCursor++
+    return line
+  }
+  try {
+    const parts = [{ text: buildSystemPrompt(context) + '\nDescribe what is in view in 1–2 sentences.' }]
+    if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${REST_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
+        signal: AbortSignal.timeout(15000),
+      },
+    )
+    if (!res.ok) return `(guide unavailable: ${res.status})`
+    const data = await res.json()
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('')
+    return text || '…'
+  } catch (e) {
+    return `(guide error: ${e.message})`
+  }
+}
+
 /**
  * A single guide session. Wraps either a real Gemini Live connection or a mock generator.
  * The client-facing contract is identical: call pushContext(), pushFrame(), and receive
