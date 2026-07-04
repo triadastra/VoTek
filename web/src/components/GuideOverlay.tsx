@@ -12,6 +12,7 @@ export function GuideOverlay({
   onAsk,
   liveMode,
   onMicMute,
+  onSettings,
 }: {
   status: VisionStatus
   messages: GuideMessage[]
@@ -20,6 +21,7 @@ export function GuideOverlay({
   onAsk: (question: string) => void
   liveMode: boolean
   onMicMute: (muted: boolean) => void
+  onSettings: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const recRef = useRef<Recognizer | null>(null)
@@ -137,6 +139,9 @@ export function GuideOverlay({
             <Icon name={muted ? 'mute' : 'volume'} size={18} />
           </button>
         )}
+        <button className="overlay__icbtn" onClick={onSettings} aria-label="Settings">
+          <Icon name="settings" size={18} />
+        </button>
         <button className="overlay__icbtn" onClick={onClose} aria-label="Close guide">
           <Icon name="x" size={18} />
         </button>

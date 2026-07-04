@@ -15,7 +15,7 @@ import { InsecureBanner } from './components/InsecureBanner'
 import { RouteBanner } from './components/RouteBanner'
 import { TrailChip } from './components/TrailChip'
 import { LensView } from './components/LensView'
-import { ModelSelector, type Selection } from './components/ModelSelector'
+import { SettingsSheet, type Selection } from './components/SettingsSheet'
 import { Icon } from './ui/Icon'
 
 const SEL_KEY = 'votek.selection'
@@ -69,7 +69,7 @@ export default function App() {
   const [mode, setMode] = useState<'live' | 'mock' | null>(null)
   const [providers, setProviders] = useState<ProviderInfo[]>([])
   const [selection, setSelection] = useState<Selection | null>(loadSelection)
-  const [selectorOpen, setSelectorOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [showInsecure, setShowInsecure] = useState(!window.isSecureContext)
   const [showSpots, setShowSpots] = useState(false)
   const [route, setRoute] = useState<RouteResult | null>(null)
@@ -339,8 +339,8 @@ export default function App() {
             {' · '}
             {spots.length} spots
           </span>
-          <button className="model-pill" onClick={() => setSelectorOpen(true)}>
-            <Icon name="star" size={12} />
+          <button className="model-pill" onClick={() => setSettingsOpen(true)} aria-label="Settings">
+            <Icon name="settings" size={13} />
             {selection ? selection.model : mode === 'mock' ? 'demo' : 'AI model'}
           </button>
         </div>
@@ -355,21 +355,21 @@ export default function App() {
           onAsk={(q) => visionRef.current?.ask(q)}
           liveMode={liveMode}
           onMicMute={(m) => visionRef.current?.setMicMuted(m)}
+          onSettings={() => setSettingsOpen(true)}
         />
       )}
 
       {lens && <LensView lens={lens} onClose={() => setLens(null)} />}
 
-      {selectorOpen && (
-        <ModelSelector
+      {settingsOpen && (
+        <SettingsSheet
           providers={providers}
           selection={selection}
           onSelect={(s) => {
             setSelection(s)
             visionRef.current?.setSelection(s)
-            setSelectorOpen(false)
           }}
-          onClose={() => setSelectorOpen(false)}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
 

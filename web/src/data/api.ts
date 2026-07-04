@@ -77,3 +77,24 @@ export async function getHealth(): Promise<HealthInfo | null> {
     return null
   }
 }
+
+export interface ProbeResult {
+  ok: boolean
+  status: number
+  model: string | null
+  reason?: string
+  error?: string
+}
+
+/** Live "test connection" for one provider/model — surfaces the real status (404/401/OK). */
+export async function testProvider(provider: string, model?: string): Promise<ProbeResult> {
+  const params = new URLSearchParams({ provider })
+  if (model) params.set('model', model)
+  try {
+    const res = await fetch(`/api/health?${params}`)
+    if (!res.ok) return { ok: false, status: res.status, model: model ?? null }
+    return (await res.json()) as ProbeResult
+  } catch (e) {
+    return { ok: false, status: 0, model: model ?? null, error: (e as Error).message }
+  }
+}

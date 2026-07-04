@@ -159,6 +159,26 @@ async function providerGenerate({ provider, apiKey, model, system, instruction, 
   return generateContent(apiKey, parts, model)
 }
 
+// A tiny text-only round-trip to check that a provider's key + model actually work. Powers
+// the in-app Settings "Test connection" diagnostic, so a 404/401 is visible instead of cryptic.
+export async function probeProvider({ keys, provider = 'gemini', model }) {
+  const apiKey = keys?.[provider]
+  if (!apiKey) return { ok: false, status: 0, reason: 'no-key' }
+  try {
+    const r = await providerGenerate({
+      provider,
+      apiKey,
+      model,
+      system: 'You are a connection test.',
+      instruction: 'Reply with the single word OK.',
+      jpegBase64: null,
+    })
+    return { ok: !!r.ok, status: r.status || 0, model: r.model || model || null, error: r.error }
+  } catch (e) {
+    return { ok: false, status: 0, error: e.message }
+  }
+}
+
 export async function guideOnce({ keys, provider = 'gemini', model, context, jpegBase64, question }) {
   const apiKey = keys?.[provider]
   if (!apiKey) {

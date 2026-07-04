@@ -234,6 +234,32 @@ button { font: inherit; cursor: pointer; }
   border: 1px solid var(--stroke); background: #fff; color: var(--ink); font-size: 13px; font-weight: 600;
 }
 .ms__model.on { border-color: var(--accent); background: rgba(122,77,255,0.1); color: var(--accent); }
+.ms__label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-dim); margin-top: 14px; }
+.sheet__close {
+  border: none; background: rgba(20,30,50,0.07); color: var(--ink-dim);
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: 0 0 auto;
+}
+.sheet__close:active { transform: scale(0.94); }
+
+/* Live "test connection" status row */
+.ms__status {
+  display: flex; align-items: center; gap: 10px; margin-top: 18px;
+  padding: 11px 13px; border-radius: 13px; border: 1px solid var(--stroke); background: rgba(20,30,50,0.03);
+}
+.ms__status.ok { border-color: rgba(35,193,122,0.45); background: rgba(35,193,122,0.08); }
+.ms__status.bad { border-color: rgba(245,166,35,0.5); background: rgba(245,166,35,0.09); }
+.ms__status-ic { flex: 0 0 auto; display: grid; place-items: center; color: var(--ink-dim); }
+.ms__status.ok .ms__status-ic { color: var(--good); }
+.ms__status.bad .ms__status-ic { color: var(--warn); }
+.ms__status-text { flex: 1; font-size: 13px; line-height: 1.4; color: var(--ink); }
+.ms__retest {
+  flex: 0 0 auto; border: 1px solid var(--stroke); background: #fff; color: var(--accent);
+  font-size: 13px; font-weight: 700; padding: 7px 13px; border-radius: 10px;
+}
+.ms__retest:disabled { opacity: 0.5; }
+.ms__foot { margin-top: 16px; font-size: 12px; line-height: 1.5; color: var(--ink-dim); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---- Trail chip (pathway mode) ---- */
 .trailchip {

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import express from 'express'
 import { WebSocketServer } from 'ws'
-import { GuideSession, guideOnce, identify, generateContent, resolveLiveModel } from './gemini.js'
+import { GuideSession, guideOnce, identify, generateContent, resolveLiveModel, probeProvider } from './gemini.js'
 import { availableProviders } from './altproviders.js'
 import { reverseGeocode } from './geocode.js'
 import { searchPlaces, wikiLookup } from './search.js'
@@ -43,7 +43,13 @@ app.get('/api/providers', (_req, res) => {
 })
 
 // Health / mode. The client can use this to show whether the real guide is wired up.
-app.get('/api/health', async (_req, res) => {
+// With ?provider=X it runs a live "test connection" probe for that provider (used by Settings).
+app.get('/api/health', async (req, res) => {
+  const provider = req.query.provider ? String(req.query.provider) : null
+  if (provider) {
+    const r = await probeProvider({ keys: KEYS, provider, model: req.query.model ? String(req.query.model) : undefined })
+    return res.json({ provider, ...r })
+  }
   const out = { ok: true, mode: API_KEY ? 'live' : 'mock', build: 'model-probe' }
   if (API_KEY) {
     // Actually call the API so we can tell whether the KEY works and which model succeeds.
