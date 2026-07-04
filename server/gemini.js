@@ -27,9 +27,69 @@ export function buildSystemPrompt(context) {
     .join(' ')
 }
 
-// ---- Single-shot guide (HTTP fallback when the realtime WebSocket can't connect) ----
-// Uses the standard Gemini REST vision model, which is more broadly reachable than the Live API.
-const REST_MODEL = 'gemini-2.0-flash'
+// ---- Model resolution ----
+// Model IDs vary by key/project/region, so hardcoding one causes 404s. Discover a valid model
+// from the key via ListModels and cache it. Falls back to a candidate list if discovery fails.
+let cachedRest = null
+let cachedLive = null
+
+async function listModels(apiKey) {
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=200`, {
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.models || []
+  } catch {
+    return null
+  }
+}
+
+// A model that supports one-shot generateContent (for narration + Lens identify).
+export async function resolveRestModel(apiKey) {
+  if (cachedRest) return cachedRest
+  const prefer = [process.env.GEMINI_REST_MODEL, 'gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'].filter(Boolean)
+  const models = await listModels(apiKey)
+  if (models) {
+    const names = models
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => m.name.replace(/^models\//, ''))
+    const pick =
+      prefer.find((p) => names.includes(p)) ||
+      names.find((n) => /flash/.test(n) && !/(vision|thinking|exp|tts|image)/.test(n)) ||
+      names.find((n) => /flash|pro/.test(n)) ||
+      names[0]
+    if (pick) {
+      cachedRest = pick
+      console.log(`Gemini REST model: ${pick}`)
+      return pick
+    }
+  }
+  cachedRest = prefer[0] || 'gemini-1.5-flash'
+  return cachedRest
+}
+
+// A model that supports the live bidi stream (for audio/video). Falls back gracefully.
+export async function resolveLiveModel(apiKey) {
+  if (cachedLive) return cachedLive
+  const prefer = [process.env.GEMINI_MODEL, 'gemini-2.0-flash-live-001', 'gemini-live-2.5-flash-preview'].filter(Boolean)
+  const models = await listModels(apiKey)
+  if (models) {
+    const names = models
+      .filter((m) => (m.supportedGenerationMethods || []).includes('bidiGenerateContent'))
+      .map((m) => m.name.replace(/^models\//, ''))
+    const pick = prefer.find((p) => names.includes(p)) || names.find((n) => /live/.test(n)) || names[0]
+    if (pick) {
+      cachedLive = pick
+      console.log(`Gemini live model: ${pick}`)
+      return pick
+    }
+  }
+  cachedLive = prefer[0] || 'gemini-2.0-flash-live-001'
+  return cachedLive
+}
+
 const MOCK_LINES = [
   'I can see what you see — let me tell you about this place.',
   'Notice the details around you; each one has a small story.',
@@ -58,8 +118,9 @@ export async function guideOnce({ apiKey, context, jpegBase64, question }) {
       : 'Describe what is in view in 1–2 sentences.'
     const parts = [{ text: buildSystemPrompt(context) + '\n' + instruction }]
     if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
+    const model = await resolveRestModel(apiKey)
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${REST_MODEL}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,8 +155,9 @@ export async function identify({ apiKey, context, jpegBase64, question }) {
       },
     ]
     if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
+    const model = await resolveRestModel(apiKey)
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${REST_MODEL}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,9 +211,12 @@ export class GuideSession {
     this.stopped = false
   }
 
-  start() {
+  async start() {
     if (this.mock) return // mock narration is driven by frames/context
     try {
+      // Resolve a live model the key actually has (avoids 404s from a hardcoded ID).
+      this.model = await resolveLiveModel(this.apiKey)
+      if (this.stopped) return
       const url =
         'wss://generativelanguage.googleapis.com/ws/' +
         'google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent' +

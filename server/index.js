@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import express from 'express'
 import { WebSocketServer } from 'ws'
-import { GuideSession, guideOnce, identify } from './gemini.js'
+import { GuideSession, guideOnce, identify, resolveRestModel, resolveLiveModel } from './gemini.js'
 import { reverseGeocode } from './geocode.js'
 import { searchPlaces, wikiLookup } from './search.js'
 import { getRoute } from './routing.js'
@@ -29,8 +29,14 @@ const app = express()
 app.use(express.json({ limit: '6mb' })) // frames arrive as base64 JPEG
 
 // Health / mode. The client can use this to show whether the real guide is wired up.
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, mode: API_KEY ? 'live' : 'mock', model: MODEL })
+app.get('/api/health', async (_req, res) => {
+  const out = { ok: true, mode: API_KEY ? 'live' : 'mock' }
+  if (API_KEY) {
+    // Report the models actually resolved from the key (helps diagnose 404s).
+    out.restModel = await resolveRestModel(API_KEY)
+    out.liveModel = await resolveLiveModel(API_KEY)
+  }
+  res.json(out)
 })
 
 // In a real deploy this endpoint mints a short-lived EPHEMERAL token for the client,
