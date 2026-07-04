@@ -39,9 +39,12 @@ const MOCK_LINES = [
 ]
 let mockCursor = 0
 
-export async function guideOnce({ apiKey, context, jpegBase64 }) {
+export async function guideOnce({ apiKey, context, jpegBase64, question }) {
   if (!apiKey) {
     const place = context?.place
+    if (question) {
+      return `Good question — "${question}". In the full version I'll answer with real history about ${place || 'this place'}. Add a GEMINI_API_KEY to enable it.`
+    }
     const line =
       mockCursor === 0 && place
         ? `You're at ${place}. I can see what you see — let's explore.`
@@ -50,7 +53,10 @@ export async function guideOnce({ apiKey, context, jpegBase64 }) {
     return line
   }
   try {
-    const parts = [{ text: buildSystemPrompt(context) + '\nDescribe what is in view in 1–2 sentences.' }]
+    const instruction = question
+      ? `The user asks: "${question}". Answer as their in-person guide in 1–3 sentences, using what's in view and where they are.`
+      : 'Describe what is in view in 1–2 sentences.'
+    const parts = [{ text: buildSystemPrompt(context) + '\n' + instruction }]
     if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${REST_MODEL}:generateContent?key=${apiKey}`,

@@ -6,6 +6,7 @@ import { useTrail } from './location/useTrail'
 import { photoSpotsNear } from './data/photoSpots'
 import { getHealth, getRoute, searchPlaces, type RouteResult } from './data/api'
 import { VisionCore, type GuideMessage, type VisionStatus } from './vision/visionCore'
+import { warmUpSpeech } from './vision/speech'
 import { SearchBar } from './components/SearchBar'
 import { MapControls } from './components/MapControls'
 import { PlaceSheet, type SheetTarget } from './components/PlaceSheet'
@@ -193,6 +194,7 @@ export default function App() {
 
   // --- Guide session ---
   const startGuide = useCallback(async () => {
+    warmUpSpeech() // unlock audio on this user gesture so the guide can speak (iOS)
     const anyDO = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }
     if (typeof anyDO?.requestPermission === 'function') {
       try {
@@ -296,7 +298,13 @@ export default function App() {
       </div>
 
       {guideOpen && (
-        <GuideOverlay status={visionStatus} messages={messages} onClose={stopGuide} attachVideo={attachVideo} />
+        <GuideOverlay
+          status={visionStatus}
+          messages={messages}
+          onClose={stopGuide}
+          attachVideo={attachVideo}
+          onAsk={(q) => visionRef.current?.ask(q)}
+        />
       )}
 
       {selected && (

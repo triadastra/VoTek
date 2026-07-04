@@ -45,7 +45,12 @@ app.post('/api/guide', async (req, res) => {
   const ctx = req.body?.context || {}
   let place = ctx.place
   if (!place && ctx.location) place = await reverseGeocode(ctx.location.lat, ctx.location.lng)
-  const text = await guideOnce({ apiKey: API_KEY, context: { ...ctx, place }, jpegBase64: req.body?.jpegBase64 })
+  const text = await guideOnce({
+    apiKey: API_KEY,
+    context: { ...ctx, place },
+    jpegBase64: req.body?.jpegBase64,
+    question: req.body?.question,
+  })
   res.json({ text })
 })
 

@@ -281,12 +281,53 @@ button { font: inherit; cursor: pointer; }
   background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 52%, rgba(0,0,0,0.85) 100%);
 }
 .overlay__top { position: absolute; top: calc(var(--safe-top) + 12px); left: 16px; right: 16px; display: flex; align-items: center; gap: 10px; }
-.overlay__close { margin-left: auto; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 18px; }
+.overlay__icbtn {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: #fff;
+}
+.overlay__icbtn:last-child { margin-left: 0; }
+.overlay__top .pill { margin-right: auto; }
 .pill { display: flex; align-items: center; gap: 7px; padding: 7px 12px; border-radius: 999px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.18); font-size: 12px; color: #dfe5ee; }
 .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: #9aa6b8; }
 .pill.live .dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
 .pill.error .dot { background: var(--warn); }
-.transcript { position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-bottom) + 24px); display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow-y: auto; }
-.bubble { align-self: flex-start; max-width: 92%; padding: 12px 14px; border-radius: 16px 16px 16px 4px; background: rgba(20,26,38,0.82); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.12); color: #eef2f8; font-size: 15px; line-height: 1.4; }
-.bubble.partial { opacity: 0.7; }
-.bubble__tag { font-size: 11px; color: #c9b8ff; font-weight: 700; margin-bottom: 3px; }
+
+/* ---- Caption + mic ---- */
+.caption-wrap {
+  position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-bottom) + 20px);
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.caption {
+  width: 100%; max-width: 560px; align-self: center;
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 14px 16px; border-radius: 18px;
+  background: rgba(12, 16, 24, 0.72); backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: #f3f6fb; font-size: 17px; line-height: 1.4; font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+.caption--you { background: rgba(66, 108, 216, 0.5); border-color: rgba(140,170,255,0.4); }
+.caption__tag { flex: 0 0 auto; font-size: 10px; font-weight: 800; letter-spacing: 0.6px; padding: 4px 7px; border-radius: 6px; margin-top: 1px; background: rgba(255,255,255,0.14); color: #c9d6ff; }
+.caption--you .caption__tag { background: rgba(255,255,255,0.22); color: #fff; }
+.caption__text { flex: 1; }
+.caption__wave { display: inline-flex; align-items: flex-end; gap: 2.5px; height: 16px; margin-top: 4px; flex: 0 0 auto; }
+.caption__wave i { width: 3px; background: #8fb4ff; border-radius: 2px; animation: wave 0.9s ease-in-out infinite; }
+.caption__wave i:nth-child(1){ animation-delay: 0s } .caption__wave i:nth-child(2){ animation-delay: .15s }
+.caption__wave i:nth-child(3){ animation-delay: .3s } .caption__wave i:nth-child(4){ animation-delay: .45s }
+@keyframes wave { 0%,100%{ height: 5px } 50%{ height: 16px } }
+
+.mic {
+  position: relative; width: 68px; height: 68px; border-radius: 50%; border: none; color: #fff;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  box-shadow: 0 10px 26px -6px rgba(66,110,230,0.7), inset 0 1px 0 rgba(255,255,255,0.4);
+  transition: transform 0.12s ease;
+}
+.mic:active { transform: scale(0.95); }
+.mic--on { background: linear-gradient(135deg, #ff5b7a, #ff8b5b); }
+.mic--on::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid rgba(255,91,122,0.6); animation: micpulse 1.3s ease-out infinite;
+}
+@keyframes micpulse { 0%{ transform: scale(1); opacity: .8 } 100%{ transform: scale(1.5); opacity: 0 } }
+.mic__hint { font-size: 12px; color: rgba(255,255,255,0.85); text-shadow: 0 1px 3px rgba(0,0,0,0.6); margin-top: -4px; }

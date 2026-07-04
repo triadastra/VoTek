@@ -5,7 +5,7 @@ import type { LngLat } from '../map/types'
 // never talks to Gemini directly — only through the broker, which holds the key.
 
 export interface GuideMessage {
-  role: 'guide'
+  role: 'guide' | 'you'
   text: string
   /** true while the guide is still streaming this message. */
   partial?: boolean
@@ -138,6 +138,29 @@ export class VisionCore {
   updateContext(context: VisionContext) {
     this.context = context
     this.send({ type: 'context', context })
+  }
+
+  /** Ask the guide a spoken question about what's in view. Answered via HTTP for reliability. */
+  async ask(question: string) {
+    const q = question.trim()
+    if (!q) return
+    this.events.onMessage?.({ role: 'you', text: q })
+    this.httpBusy = true // pause ambient narration while answering
+    try {
+      const res = await fetch('/api/guide', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context: this.context, jpegBase64: this.captureFrame(), question: q }),
+      })
+      if (res.ok) {
+        const { text } = await res.json()
+        if (text) this.events.onMessage?.({ role: 'guide', text })
+      }
+    } catch {
+      this.events.onMessage?.({ role: 'guide', text: '(couldn’t reach the guide just now)' })
+    } finally {
+      this.httpBusy = false
+    }
   }
 
   disconnect() {
