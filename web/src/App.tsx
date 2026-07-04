@@ -177,7 +177,6 @@ export default function App() {
         onCategory={(q) => runSearch(q, true)}
         onPick={pickResult}
         onClear={clearSearch}
-        mode={mode}
       />
 
       <MapControls
@@ -194,9 +193,16 @@ export default function App() {
       <div className="dock">
         <button className="guide-btn" onClick={startGuide}>
           ◐ Start guide
+          {mode && (
+            <span className={`guide-btn__badge ${mode}`}>{mode === 'live' ? 'AI live' : 'demo'}</span>
+          )}
         </button>
         <div className="dock__hint">
-          {geo.error ? 'GPS off' : geo.position ? `GPS · ±${Math.round(geo.accuracy ?? 0)}m` : 'Locating…'}
+          {geo.error
+            ? geo.error
+            : geo.position
+              ? `GPS · ±${Math.round(geo.accuracy ?? 0)}m`
+              : 'Locating…'}
           {' · '}
           {spots.length} photo spots nearby
         </div>

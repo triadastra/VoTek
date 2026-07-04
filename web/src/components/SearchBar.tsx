@@ -17,14 +17,12 @@ export function SearchBar({
   onCategory,
   onPick,
   onClear,
-  mode,
 }: {
   results: Place[]
   onSearch: (q: string) => void
   onCategory: (q: string, label: string) => void
   onPick: (p: Place) => void
   onClear: () => void
-  mode: 'live' | 'mock' | null
 }) {
   const [q, setQ] = useState('')
   const [focused, setFocused] = useState(false)
@@ -68,7 +66,6 @@ export function SearchBar({
             ✕
           </button>
         )}
-        {mode && <span className={`search__mode ${mode}`}>{mode === 'live' ? 'AI live' : 'demo'}</span>}
       </div>
 
       {showDropdown && (
