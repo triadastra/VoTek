@@ -1,0 +1,156 @@
+/* VoTek — our own UI. Dark, glassy, mobile-first. No default map chrome. */
+:root {
+  --bg: #0b0f17;
+  --surface: rgba(20, 26, 38, 0.72);
+  --surface-solid: #141a26;
+  --stroke: rgba(255, 255, 255, 0.09);
+  --text: #eef2f8;
+  --text-dim: #9aa6b8;
+  --brand: #5b8cff;
+  --brand-2: #8b5bff;
+  --accent: #c9b8ff;
+  --good: #43d6a0;
+  --warn: #ffb84d;
+  --radius: 20px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.app { position: fixed; inset: 0; }
+
+/* ---- Map surface ---- */
+.map { position: absolute; inset: 0; }
+.maplibregl-ctrl-attrib { font-size: 10px; opacity: 0.5; }
+
+/* Our own user location dot */
+.user-dot { width: 22px; height: 22px; position: relative; }
+.user-dot__core {
+  position: absolute; inset: 5px; border-radius: 50%;
+  background: var(--brand); border: 2px solid #fff;
+  box-shadow: 0 0 12px rgba(91, 140, 255, 0.9);
+}
+.user-dot__pulse {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: rgba(91, 140, 255, 0.35);
+  animation: pulse 2.4s ease-out infinite;
+}
+@keyframes pulse {
+  0% { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+/* ---- Top bar ---- */
+.topbar {
+  position: absolute; top: 0; left: 0; right: 0;
+  padding: calc(var(--safe-top) + 12px) 16px 12px;
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(180deg, rgba(11, 15, 23, 0.85), rgba(11, 15, 23, 0));
+  pointer-events: none;
+}
+.topbar > * { pointer-events: auto; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: 0.2px; }
+.brand__dot { width: 10px; height: 10px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2)); }
+.pill {
+  margin-left: auto; display: flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 999px;
+  background: var(--surface); backdrop-filter: blur(18px);
+  border: 1px solid var(--stroke); font-size: 12px; color: var(--text-dim);
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); }
+.pill.live .dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
+.pill.error .dot { background: var(--warn); }
+
+/* ---- Recenter button ---- */
+.fab {
+  position: absolute; right: 16px; bottom: calc(var(--safe-bottom) + 128px);
+  width: 48px; height: 48px; border-radius: 16px;
+  background: var(--surface); backdrop-filter: blur(18px);
+  border: 1px solid var(--stroke); color: var(--text);
+  display: grid; place-items: center; font-size: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.fab:active { transform: scale(0.94); }
+
+/* ---- Guide dock (bottom) ---- */
+.dock {
+  position: absolute; left: 12px; right: 12px; bottom: calc(var(--safe-bottom) + 14px);
+  padding: 14px; border-radius: var(--radius);
+  background: var(--surface); backdrop-filter: blur(24px);
+  border: 1px solid var(--stroke);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.dock__row { display: flex; align-items: center; gap: 12px; }
+.guide-btn {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 15px; border-radius: 14px; border: none; color: #fff; font-weight: 700; font-size: 16px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  box-shadow: 0 6px 20px rgba(91, 140, 255, 0.35);
+}
+.guide-btn:active { transform: translateY(1px); }
+.guide-btn.stop { background: linear-gradient(135deg, #ff5b7a, #ff8b5b); box-shadow: none; }
+.dock__hint { margin-top: 10px; font-size: 12px; color: var(--text-dim); text-align: center; }
+
+/* ---- Guide overlay (camera + transcript) ---- */
+.overlay { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; }
+.overlay__video { flex: 1; width: 100%; object-fit: cover; }
+.overlay__scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 25%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.85) 100%);
+  pointer-events: none;
+}
+.overlay__top {
+  position: absolute; top: calc(var(--safe-top) + 12px); left: 16px; right: 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.overlay__close {
+  margin-left: auto; width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(0,0,0,0.5); border: 1px solid var(--stroke); color: #fff; font-size: 18px;
+}
+.transcript {
+  position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-bottom) + 24px);
+  display: flex; flex-direction: column; gap: 8px; max-height: 42vh; overflow-y: auto;
+}
+.bubble {
+  align-self: flex-start; max-width: 92%;
+  padding: 12px 14px; border-radius: 16px 16px 16px 4px;
+  background: var(--surface); backdrop-filter: blur(18px); border: 1px solid var(--stroke);
+  font-size: 15px; line-height: 1.4;
+}
+.bubble.partial { opacity: 0.7; }
+.bubble__tag { font-size: 11px; color: var(--accent); font-weight: 700; margin-bottom: 3px; }
+
+/* ---- Photo spot sheet ---- */
+.sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.5); }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 20px 20px calc(var(--safe-bottom) + 24px);
+  border-radius: 24px 24px 0 0; background: var(--surface-solid);
+  border-top: 1px solid var(--stroke);
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.6);
+  animation: rise 0.25s ease;
+}
+@keyframes rise { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.sheet__grip { width: 40px; height: 4px; border-radius: 2px; background: var(--stroke); margin: 0 auto 16px; }
+.sheet__title { font-size: 20px; font-weight: 800; }
+.sheet__score {
+  display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 12px;
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: rgba(139, 91, 255, 0.15); color: var(--accent);
+}
+.sheet__blurb { color: var(--text-dim); }
+.sheet__go {
+  margin-top: 18px; width: 100%; padding: 14px; border: none; border-radius: 14px;
+  font-weight: 700; font-size: 16px; color: #fff;
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+}
