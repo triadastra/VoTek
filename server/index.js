@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import express from 'express'
 import { WebSocketServer } from 'ws'
-import { GuideSession, guideOnce, identify, resolveRestModel, resolveLiveModel } from './gemini.js'
+import { GuideSession, guideOnce, identify, generateContent, resolveLiveModel } from './gemini.js'
 import { reverseGeocode } from './geocode.js'
 import { searchPlaces, wikiLookup } from './search.js'
 import { getRoute } from './routing.js'
@@ -30,10 +30,13 @@ app.use(express.json({ limit: '6mb' })) // frames arrive as base64 JPEG
 
 // Health / mode. The client can use this to show whether the real guide is wired up.
 app.get('/api/health', async (_req, res) => {
-  const out = { ok: true, mode: API_KEY ? 'live' : 'mock' }
+  const out = { ok: true, mode: API_KEY ? 'live' : 'mock', build: 'model-probe' }
   if (API_KEY) {
-    // Report the models actually resolved from the key (helps diagnose 404s).
-    out.restModel = await resolveRestModel(API_KEY)
+    // Actually call the API so we can tell whether the KEY works and which model succeeds.
+    const r = await generateContent(API_KEY, [{ text: 'Reply with the single word OK.' }])
+    out.keyWorks = r.ok
+    out.probeStatus = r.status
+    out.restModel = r.model || null
     out.liveModel = await resolveLiveModel(API_KEY)
   }
   res.json(out)

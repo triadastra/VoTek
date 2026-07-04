@@ -70,6 +70,56 @@ export async function resolveRestModel(apiKey) {
   return cachedRest
 }
 
+// Candidate REST models tried in order if the resolved one 404s. Self-corrects across
+// key/project/region differences without needing ListModels to succeed.
+const REST_CANDIDATES = [
+  'gemini-2.0-flash',
+  'gemini-2.5-flash',
+  'gemini-flash-latest',
+  'gemini-2.0-flash-001',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-latest',
+  'gemini-pro-latest',
+]
+
+// One-shot generateContent that tries the resolved model, then falls through candidates on a
+// model-not-found (404/400), caching whichever works. Returns { ok, text, status }.
+export async function generateContent(apiKey, parts) {
+  const first = await resolveRestModel(apiKey)
+  const order = [first, ...REST_CANDIDATES.filter((m) => m !== first)]
+  const tried = new Set()
+  let lastStatus = 0
+  for (const model of order) {
+    if (tried.has(model)) continue
+    tried.add(model)
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
+          signal: AbortSignal.timeout(15000),
+        },
+      )
+      if (res.status === 404 || res.status === 400) {
+        lastStatus = res.status
+        cachedRest = null // that model is wrong; try the next
+        continue
+      }
+      if (!res.ok) return { ok: false, status: res.status }
+      const data = await res.json()
+      const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('') || ''
+      cachedRest = model // remember the one that worked
+      console.log(`Gemini REST model working: ${model}`)
+      return { ok: true, text, status: 200, model }
+    } catch (e) {
+      return { ok: false, status: 0, error: e.message }
+    }
+  }
+  return { ok: false, status: lastStatus || 404 }
+}
+
 // A model that supports the live bidi stream (for audio/video). Falls back gracefully.
 export async function resolveLiveModel(apiKey) {
   if (cachedLive) return cachedLive
@@ -118,20 +168,9 @@ export async function guideOnce({ apiKey, context, jpegBase64, question }) {
       : 'Describe what is in view in 1–2 sentences.'
     const parts = [{ text: buildSystemPrompt(context) + '\n' + instruction }]
     if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
-    const model = await resolveRestModel(apiKey)
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
-        signal: AbortSignal.timeout(15000),
-      },
-    )
-    if (!res.ok) return `(guide unavailable: ${res.status})`
-    const data = await res.json()
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('')
-    return text || '…'
+    const r = await generateContent(apiKey, parts)
+    if (!r.ok) return `(guide unavailable: ${r.status})`
+    return r.text || '…'
   } catch (e) {
     return `(guide error: ${e.message})`
   }
@@ -155,19 +194,9 @@ export async function identify({ apiKey, context, jpegBase64, question }) {
       },
     ]
     if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
-    const model = await resolveRestModel(apiKey)
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
-        signal: AbortSignal.timeout(15000),
-      },
-    )
-    if (!res.ok) return { subject: q, answer: `(couldn’t identify: ${res.status})` }
-    const data = await res.json()
-    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('') || ''
+    const r = await generateContent(apiKey, parts)
+    if (!r.ok) return { subject: q, answer: `(couldn’t identify: ${r.status})` }
+    const text = r.text || ''
     const m = text.match(/\{[\s\S]*\}/)
     if (m) {
       try {
