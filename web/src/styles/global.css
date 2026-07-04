@@ -279,10 +279,28 @@ button { font: inherit; cursor: pointer; }
   display: flex; flex-direction: row;
 }
 .lens__media {
-  flex: 1 1 48%; min-width: 0; background: #f2f4f8;
+  flex: 1 1 48%; min-width: 0; background: #f2f4f8; position: relative;
   display: grid; place-items: center; overflow: hidden;
 }
-.lens__media img { width: 100%; height: 100%; object-fit: contain; }
+.lens__img { width: 100%; height: 100%; object-fit: contain; }
+.lens__thumbs {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 8px;
+  padding: 10px; overflow-x: auto; background: linear-gradient(0deg, rgba(0,0,0,0.25), transparent);
+  scrollbar-width: none;
+}
+.lens__thumbs::-webkit-scrollbar { display: none; }
+.lens__thumb {
+  flex: 0 0 auto; width: 52px; height: 52px; border-radius: 9px; overflow: hidden; padding: 0;
+  border: 2px solid rgba(255,255,255,0.7); background: #fff; opacity: 0.7;
+}
+.lens__thumb.on { border-color: var(--brand); opacity: 1; }
+.lens__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.lens__read {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 7px;
+  margin: 0 0 14px; padding: 8px 14px; border-radius: 999px; border: none;
+  background: rgba(66,133,244,0.12); color: var(--brand); font-weight: 700; font-size: 14px;
+}
+.lens__read.on { background: var(--brand); color: #fff; }
 .lens__noimg { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #9aa6b8; font-size: 13px; }
 .lens__panel {
   flex: 1 1 52%; min-width: 0; position: relative;
@@ -345,6 +363,14 @@ button { font: inherit; cursor: pointer; }
   position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-bottom) + 20px);
   display: flex; flex-direction: column; align-items: center; gap: 14px;
 }
+.ask-chips { display: flex; gap: 8px; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.ask-chips::-webkit-scrollbar { display: none; }
+.ask-chips button {
+  flex: 0 0 auto; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(0,0,0,0.42); backdrop-filter: blur(12px); color: #fff; font-size: 13px; font-weight: 600;
+  white-space: nowrap;
+}
+.ask-chips button:active { transform: scale(0.96); }
 .caption {
   width: 100%; max-width: 560px; align-self: center;
   display: flex; align-items: flex-start; gap: 9px;

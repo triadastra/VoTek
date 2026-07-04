@@ -143,6 +143,11 @@ export function GuideOverlay({
       </div>
 
       <div className="caption-wrap">
+        <div className="ask-chips">
+          <button onClick={() => onAsk('What is this place?')}>This place</button>
+          <button onClick={() => onAsk('Tell me about this building')}>This building</button>
+          <button onClick={() => onAsk('Tell me about this city')}>This city</button>
+        </div>
         <div className={`caption caption--${captionRole}`}>
           <span className="caption__tag">{captionRole === 'you' ? 'YOU' : 'GUIDE'}</span>
           <span className="caption__text">{caption}</span>

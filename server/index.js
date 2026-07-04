@@ -59,13 +59,22 @@ app.post('/api/lens', async (req, res) => {
   const ctx = req.body?.context || {}
   let place = ctx.place
   if (!place && ctx.location) place = await reverseGeocode(ctx.location.lat, ctx.location.lng)
+  const question = req.body?.question || ''
   const id = await identify({
     apiKey: API_KEY,
     context: { ...ctx, place },
     jpegBase64: req.body?.jpegBase64,
-    question: req.body?.question,
+    question,
   })
-  const lens = await wikiLookup(id.subject || req.body?.question || '')
+
+  // Pick the best web-search subject. Location-aware so "this city / this place" work even
+  // without image identification, and generic identify answers fall back to the real place.
+  const cityOf = (p) => (p ? p.split(',').map((s) => s.trim()).filter(Boolean).pop() : null)
+  let query = id.subject
+  if (!query || /\b(this|here|looking at)\b/i.test(query) || /^what\b/i.test(query)) query = place || query
+  if (/\b(city|town|neighbou?rhood|area|where am i)\b/i.test(question)) query = cityOf(place) || place || query
+
+  const lens = await wikiLookup(query || question)
   res.json({ text: id.answer, lens })
 })
 

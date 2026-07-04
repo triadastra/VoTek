@@ -74,28 +74,63 @@ function normalize(item) {
 }
 
 // Web lookup for the Lens feature: find a Wikipedia article for a subject and return its
-// summary + lead image. Free, no key.
+// summary, a longer article body (for read-aloud), and a small image gallery. Free, no key.
 export async function wikiLookup(query) {
   if (!query || !query.trim()) return null
+  const opts = { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(6000) }
   try {
     const s = await fetch(
       `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch=${encodeURIComponent(query)}`,
-      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(6000) },
+      opts,
     )
     if (!s.ok) return null
     const sd = await s.json()
     const title = sd?.query?.search?.[0]?.title
     if (!title) return null
-    const sum = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, {
-      headers: { 'User-Agent': UA },
-      signal: AbortSignal.timeout(6000),
-    })
+
+    const sum = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, opts)
     if (!sum.ok) return null
     const d = await sum.json()
+
+    // Longer plain-text body for the "Read aloud" narration.
+    let article = d.extract || ''
+    try {
+      const ex = await fetch(
+        `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=1&exchars=1600&redirects=1&format=json&titles=${encodeURIComponent(title)}`,
+        opts,
+      )
+      const ej = await ex.json()
+      const page = Object.values(ej?.query?.pages || {})[0]
+      if (page?.extract) article = page.extract
+    } catch {
+      /* keep summary */
+    }
+
+    // Image gallery: lead image first, then a few more from the article's media.
+    const images = []
+    const lead = d.originalimage?.source || d.thumbnail?.source
+    if (lead) images.push(lead)
+    try {
+      const ml = await fetch(`https://en.wikipedia.org/api/rest_v1/page/media-list/${encodeURIComponent(title)}`, opts)
+      const mj = await ml.json()
+      for (const it of mj?.items || []) {
+        if (it.type !== 'image' || !it.srcset?.length) continue
+        let src = it.srcset[it.srcset.length - 1].src
+        if (src.startsWith('//')) src = 'https:' + src
+        if (/\.svg/i.test(src)) continue
+        if (!images.includes(src)) images.push(src)
+        if (images.length >= 6) break
+      }
+    } catch {
+      /* lead image only */
+    }
+
     return {
       title: d.title || title,
       extract: d.extract || '',
-      imageUrl: d.originalimage?.source || d.thumbnail?.source || null,
+      article,
+      imageUrl: images[0] || null,
+      images,
       url: d.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`,
       source: 'Wikipedia',
     }

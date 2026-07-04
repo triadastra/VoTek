@@ -17,7 +17,11 @@ export interface GuideMessage {
 export interface LensData {
   title: string
   extract: string
+  /** Longer article body for read-aloud. */
+  article?: string
   imageUrl: string | null
+  /** Small gallery of images (lead image first). */
+  images?: string[]
   url: string
   source: string
   question?: string
