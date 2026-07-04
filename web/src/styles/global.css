@@ -208,10 +208,32 @@ button { font: inherit; cursor: pointer; }
 .guide-btn__badge.live {
   background: rgba(35, 193, 122, 0.95); color: #fff; box-shadow: none;
 }
+.dock__row2 { display: flex; align-items: center; gap: 8px; }
 .dock__hint {
   font-size: 12px; color: var(--ink-dim); background: var(--panel-glass); backdrop-filter: blur(10px);
   padding: 5px 12px; border-radius: 999px; box-shadow: var(--shadow);
 }
+.model-pill {
+  display: inline-flex; align-items: center; gap: 5px; border: none;
+  font-size: 12px; font-weight: 700; color: var(--accent);
+  background: var(--panel-glass); backdrop-filter: blur(10px);
+  padding: 5px 12px; border-radius: 999px; box-shadow: var(--shadow);
+}
+.model-pill:active { transform: scale(0.96); }
+
+/* Model selector sheet */
+.ms { max-height: 70vh; overflow-y: auto; }
+.ms__empty { color: var(--ink-dim); font-size: 14px; line-height: 1.5; }
+.ms__empty code { background: rgba(20,30,50,0.08); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+.ms__group { margin-top: 16px; }
+.ms__provider { font-weight: 800; font-size: 13px; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ms__live { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; color: var(--good); background: rgba(35,193,122,0.14); padding: 2px 7px; border-radius: 999px; }
+.ms__models { display: flex; flex-wrap: wrap; gap: 8px; }
+.ms__model {
+  display: inline-flex; align-items: center; gap: 5px; padding: 9px 13px; border-radius: 11px;
+  border: 1px solid var(--stroke); background: #fff; color: var(--ink); font-size: 13px; font-weight: 600;
+}
+.ms__model.on { border-color: var(--accent); background: rgba(122,77,255,0.1); color: var(--accent); }
 
 /* ---- Trail chip (pathway mode) ---- */
 .trailchip {

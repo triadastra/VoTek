@@ -1,4 +1,5 @@
 import WebSocket from 'ws'
+import { openaiVision, anthropicVision } from './altproviders.js'
 
 // Builds the tour-guide system prompt from live context (precise location, place, spots).
 export function buildSystemPrompt(context) {
@@ -84,8 +85,8 @@ const REST_CANDIDATES = [
 
 // One-shot generateContent that tries the resolved model, then falls through candidates on a
 // model-not-found (404/400), caching whichever works. Returns { ok, text, status }.
-export async function generateContent(apiKey, parts) {
-  const first = await resolveRestModel(apiKey)
+export async function generateContent(apiKey, parts, preferred) {
+  const first = preferred || (await resolveRestModel(apiKey))
   const order = [first, ...REST_CANDIDATES.filter((m) => m !== first)]
   const tried = new Set()
   let lastStatus = 0
@@ -149,11 +150,21 @@ const MOCK_LINES = [
 ]
 let mockCursor = 0
 
-export async function guideOnce({ apiKey, context, jpegBase64, question }) {
+// Dispatch a single vision generation to the chosen provider (gemini / openai / anthropic).
+async function providerGenerate({ provider, apiKey, model, system, instruction, jpegBase64 }) {
+  if (provider === 'openai') return openaiVision({ apiKey, model, system, instruction, jpegBase64 })
+  if (provider === 'anthropic') return anthropicVision({ apiKey, model, system, instruction, jpegBase64 })
+  const parts = [{ text: system + '\n' + instruction }]
+  if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
+  return generateContent(apiKey, parts, model)
+}
+
+export async function guideOnce({ keys, provider = 'gemini', model, context, jpegBase64, question }) {
+  const apiKey = keys?.[provider]
   if (!apiKey) {
     const place = context?.place
     if (question) {
-      return `Good question — "${question}". In the full version I'll answer with real history about ${place || 'this place'}. Add a GEMINI_API_KEY to enable it.`
+      return `Good question — "${question}". In the full version I'll answer with real history about ${place || 'this place'}. Add an API key (Gemini, OpenAI, or Anthropic) to enable it.`
     }
     const line =
       mockCursor === 0 && place
@@ -166,9 +177,14 @@ export async function guideOnce({ apiKey, context, jpegBase64, question }) {
     const instruction = question
       ? `The user asks: "${question}". Answer as their in-person guide in 1–3 sentences, using what's in view and where they are.`
       : 'Describe what is in view in 1–2 sentences.'
-    const parts = [{ text: buildSystemPrompt(context) + '\n' + instruction }]
-    if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
-    const r = await generateContent(apiKey, parts)
+    const r = await providerGenerate({
+      provider,
+      apiKey,
+      model,
+      system: buildSystemPrompt(context),
+      instruction,
+      jpegBase64,
+    })
     if (!r.ok) return `(guide unavailable: ${r.status})`
     return r.text || '…'
   } catch (e) {
@@ -178,23 +194,25 @@ export async function guideOnce({ apiKey, context, jpegBase64, question }) {
 
 // Identify what the user is asking about in the frame — returns a searchable subject plus a
 // short spoken answer. Powers the Lens deep-dive (subject → Wikipedia image + summary).
-export async function identify({ apiKey, context, jpegBase64, question }) {
+export async function identify({ keys, provider = 'gemini', model, context, jpegBase64, question }) {
   const q = (question || 'What am I looking at?').trim()
+  const apiKey = keys?.[provider]
   if (!apiKey) {
     return { subject: q, answer: `Let me pull up what I can find about "${q}".` }
   }
   try {
-    const parts = [
-      {
-        text:
-          buildSystemPrompt(context) +
-          `\nThe user asks: "${q}". Identify the specific subject in view (an artwork, landmark, ` +
-          `plant, building, object). Reply ONLY as compact JSON: ` +
-          `{"subject":"<short searchable name>","answer":"<1-3 sentence spoken answer>"}`,
-      },
-    ]
-    if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
-    const r = await generateContent(apiKey, parts)
+    const instruction =
+      `The user asks: "${q}". Identify the specific subject in view (an artwork, landmark, ` +
+      `plant, building, object). Reply ONLY as compact JSON: ` +
+      `{"subject":"<short searchable name>","answer":"<1-3 sentence spoken answer>"}`
+    const r = await providerGenerate({
+      provider,
+      apiKey,
+      model,
+      system: buildSystemPrompt(context),
+      instruction,
+      jpegBase64,
+    })
     if (!r.ok) return { subject: q, answer: `(couldn’t identify: ${r.status})` }
     const text = r.text || ''
     const m = text.match(/\{[\s\S]*\}/)
@@ -374,7 +392,7 @@ export class GuideSession {
     this.frameN++
     if (this.restBusy || this.frameN % 3 !== 1) return
     this.restBusy = true
-    guideOnce({ apiKey: this.apiKey, context: this.context, jpegBase64 })
+    guideOnce({ keys: { gemini: this.apiKey }, provider: 'gemini', context: this.context, jpegBase64 })
       .then((text) => {
         if (text && !this.stopped) this.onGuide(text, false)
       })

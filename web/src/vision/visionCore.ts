@@ -72,8 +72,18 @@ export class VisionCore {
   private player = new PlaybackQueue()
   private serverAudio = false // true once the broker says it's a live-audio (Gemini) session
   private micMuted = false
+  private selection: { provider: string; model?: string } | null = null
 
   constructor(private events: VisionCoreEvents = {}) {}
+
+  /** Choose which AI provider/model answers (gemini enables live audio; others use HTTP). */
+  setSelection(sel: { provider: string; model?: string } | null) {
+    this.selection = sel
+  }
+
+  private selectionBody() {
+    return this.selection ? { provider: this.selection.provider, model: this.selection.model } : {}
+  }
 
   /** Is the guide speaking with native Gemini audio (vs. browser TTS)? */
   hasLiveAudio() {
@@ -116,6 +126,14 @@ export class VisionCore {
     this.context = context
     this.closed = false
     this.setStatus('connecting')
+
+    // Only Gemini does the live audio/video WebSocket. Other providers use the HTTP path.
+    if (this.selection && this.selection.provider !== 'gemini') {
+      this.serverAudio = false
+      this.events.onLive?.(false)
+      this.startHttpFallback()
+      return
+    }
 
     let ws: WebSocket
     try {
@@ -217,7 +235,7 @@ export class VisionCore {
       const res = await fetch('/api/lens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: this.context, jpegBase64: this.captureFrame(), question: q }),
+        body: JSON.stringify({ context: this.context, jpegBase64: this.captureFrame(), question: q, ...this.selectionBody() }),
       })
       if (res.ok) {
         const { text, lens } = await res.json()
@@ -287,7 +305,7 @@ export class VisionCore {
         const res = await fetch('/api/guide', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ context: this.context, jpegBase64: this.captureFrame() }),
+          body: JSON.stringify({ context: this.context, jpegBase64: this.captureFrame(), ...this.selectionBody() }),
         })
         if (res.ok) {
           const { text } = await res.json()

@@ -45,6 +45,23 @@ export async function getRoute(
   }
 }
 
+export interface ProviderInfo {
+  id: 'gemini' | 'openai' | 'anthropic'
+  label: string
+  models: string[]
+  live: boolean
+}
+
+export async function getProviders(): Promise<{ providers: ProviderInfo[]; default: string | null }> {
+  try {
+    const res = await fetch('/api/providers')
+    if (!res.ok) return { providers: [], default: null }
+    return await res.json()
+  } catch {
+    return { providers: [], default: null }
+  }
+}
+
 export interface HealthInfo {
   ok: boolean
   mode: 'live' | 'mock'

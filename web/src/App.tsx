@@ -4,7 +4,7 @@ import type { Basemap, LngLat, MapProvider, Place, PhotoSpot } from './map/types
 import { FALLBACK_CENTER, useGeolocation } from './location/useGeolocation'
 import { useTrail } from './location/useTrail'
 import { photoSpotsNear } from './data/photoSpots'
-import { getHealth, getRoute, searchPlaces, type RouteResult } from './data/api'
+import { getHealth, getProviders, getRoute, searchPlaces, type ProviderInfo, type RouteResult } from './data/api'
 import { VisionCore, type GuideMessage, type LensData, type VisionStatus } from './vision/visionCore'
 import { warmUpSpeech } from './vision/speech'
 import { SearchBar } from './components/SearchBar'
@@ -15,7 +15,18 @@ import { InsecureBanner } from './components/InsecureBanner'
 import { RouteBanner } from './components/RouteBanner'
 import { TrailChip } from './components/TrailChip'
 import { LensView } from './components/LensView'
+import { ModelSelector, type Selection } from './components/ModelSelector'
 import { Icon } from './ui/Icon'
+
+const SEL_KEY = 'votek.selection'
+function loadSelection(): Selection | null {
+  try {
+    const s = localStorage.getItem(SEL_KEY)
+    return s ? JSON.parse(s) : null
+  } catch {
+    return null
+  }
+}
 
 function haversineM(a: LngLat, b: LngLat): number {
   const R = 6371000
@@ -56,6 +67,9 @@ export default function App() {
   const [liveMode, setLiveMode] = useState(false)
   const [messages, setMessages] = useState<GuideMessage[]>([])
   const [mode, setMode] = useState<'live' | 'mock' | null>(null)
+  const [providers, setProviders] = useState<ProviderInfo[]>([])
+  const [selection, setSelection] = useState<Selection | null>(loadSelection)
+  const [selectorOpen, setSelectorOpen] = useState(false)
   const [showInsecure, setShowInsecure] = useState(!window.isSecureContext)
   const [showSpots, setShowSpots] = useState(false)
   const [route, setRoute] = useState<RouteResult | null>(null)
@@ -67,7 +81,21 @@ export default function App() {
 
   useEffect(() => {
     getHealth().then((h) => setMode(h?.mode ?? null))
+    getProviders().then(({ providers: ps }) => {
+      setProviders(ps)
+      // Default the selection to the first provider's first model if none saved / stale.
+      setSelection((cur) => {
+        if (cur && ps.some((p) => p.id === cur.provider && p.models.includes(cur.model || ''))) return cur
+        const first = ps[0]
+        return first ? { provider: first.id, model: first.models[0] } : null
+      })
+    })
   }, [])
+
+  // Persist the model choice.
+  useEffect(() => {
+    if (selection) localStorage.setItem(SEL_KEY, JSON.stringify(selection))
+  }, [selection])
 
   // --- Init map once ---
   useEffect(() => {
@@ -228,6 +256,7 @@ export default function App() {
         ),
       onError: (e) => setMessages((prev) => [...prev, { role: 'guide', text: `⚠︎ ${e}` }]),
     })
+    core.setSelection(selection)
     visionRef.current = core
     setMessages([])
     setGuideOpen(true)
@@ -237,7 +266,7 @@ export default function App() {
       heading: geo.heading,
       nearby: spots.map((s) => s.name),
     })
-  }, [geo.position, geo.heading, geo.accuracy, spots])
+  }, [geo.position, geo.heading, geo.accuracy, spots, selection])
 
   const stopGuide = () => {
     visionRef.current?.disconnect()
@@ -304,14 +333,16 @@ export default function App() {
             <span className={`guide-btn__badge ${mode}`}>{mode === 'live' ? 'AI live' : 'Demo'}</span>
           )}
         </button>
-        <div className="dock__hint">
-          {geo.error
-            ? geo.error
-            : geo.position
-              ? `GPS · ±${Math.round(geo.accuracy ?? 0)}m`
-              : 'Locating…'}
-          {' · '}
-          {spots.length} photo spots nearby
+        <div className="dock__row2">
+          <span className="dock__hint">
+            {geo.error ? geo.error : geo.position ? `GPS · ±${Math.round(geo.accuracy ?? 0)}m` : 'Locating…'}
+            {' · '}
+            {spots.length} spots
+          </span>
+          <button className="model-pill" onClick={() => setSelectorOpen(true)}>
+            <Icon name="star" size={12} />
+            {selection ? selection.model : mode === 'mock' ? 'demo' : 'AI model'}
+          </button>
         </div>
       </div>
 
@@ -328,6 +359,19 @@ export default function App() {
       )}
 
       {lens && <LensView lens={lens} onClose={() => setLens(null)} />}
+
+      {selectorOpen && (
+        <ModelSelector
+          providers={providers}
+          selection={selection}
+          onSelect={(s) => {
+            setSelection(s)
+            visionRef.current?.setSelection(s)
+            setSelectorOpen(false)
+          }}
+          onClose={() => setSelectorOpen(false)}
+        />
+      )}
 
       {selected && (
         <PlaceSheet

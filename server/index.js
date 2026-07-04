@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import express from 'express'
 import { WebSocketServer } from 'ws'
 import { GuideSession, guideOnce, identify, generateContent, resolveLiveModel } from './gemini.js'
+import { availableProviders } from './altproviders.js'
 import { reverseGeocode } from './geocode.js'
 import { searchPlaces, wikiLookup } from './search.js'
 import { getRoute } from './routing.js'
@@ -25,8 +26,21 @@ const PORT = process.env.PORT || 8787
 const API_KEY = process.env.GEMINI_API_KEY || ''
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-live-001'
 
+// Provider keys — the client can pick any provider that has a key configured here.
+const KEYS = {
+  gemini: API_KEY,
+  openai: process.env.OPENAI_API_KEY || '',
+  anthropic: process.env.ANTHROPIC_API_KEY || '',
+}
+
 const app = express()
 app.use(express.json({ limit: '6mb' })) // frames arrive as base64 JPEG
+
+// Which AI providers are available (have a key) + their model lists, for the client selector.
+app.get('/api/providers', (_req, res) => {
+  const providers = availableProviders(KEYS)
+  res.json({ providers, default: providers[0]?.id || null })
+})
 
 // Health / mode. The client can use this to show whether the real guide is wired up.
 app.get('/api/health', async (_req, res) => {
@@ -55,7 +69,9 @@ app.post('/api/guide', async (req, res) => {
   let place = ctx.place
   if (!place && ctx.location) place = await reverseGeocode(ctx.location.lat, ctx.location.lng)
   const text = await guideOnce({
-    apiKey: API_KEY,
+    keys: KEYS,
+    provider: req.body?.provider || 'gemini',
+    model: req.body?.model,
     context: { ...ctx, place },
     jpegBase64: req.body?.jpegBase64,
     question: req.body?.question,
@@ -70,7 +86,9 @@ app.post('/api/lens', async (req, res) => {
   if (!place && ctx.location) place = await reverseGeocode(ctx.location.lat, ctx.location.lng)
   const question = req.body?.question || ''
   const id = await identify({
-    apiKey: API_KEY,
+    keys: KEYS,
+    provider: req.body?.provider || 'gemini',
+    model: req.body?.model,
     context: { ...ctx, place },
     jpegBase64: req.body?.jpegBase64,
     question,
