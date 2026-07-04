@@ -7,15 +7,27 @@ export function MapControls({
   onZoomIn,
   onZoomOut,
   onRecenter,
+  trailActive,
+  onTrail,
 }: {
   basemap: Basemap
   onBasemap: (b: Basemap) => void
   onZoomIn: () => void
   onZoomOut: () => void
   onRecenter: () => void
+  trailActive: boolean
+  onTrail: () => void
 }) {
   return (
     <div className="mapctrl">
+      <button
+        className={`mapctrl__trail ${trailActive ? 'on' : ''}`}
+        onClick={onTrail}
+        aria-label="Toggle pathway trail"
+        aria-pressed={trailActive}
+      >
+        <Icon name="trail" size={22} />
+      </button>
       <button
         className="mapctrl__layers"
         onClick={() => onBasemap(basemap === 'map' ? 'satellite' : 'map')}

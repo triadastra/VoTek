@@ -24,6 +24,8 @@ export type IconName =
   | 'pin'
   | 'star'
   | 'chevron'
+  | 'trail'
+  | 'trash'
 
 const P: Record<IconName, string> = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
@@ -57,6 +59,9 @@ const P: Record<IconName, string> = {
   pin: '<path d="M12 22s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12Z"/><circle cx="12" cy="10" r="2.5"/>',
   star: '<path d="m12 3 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9L12 3Z"/>',
   chevron: '<path d="m15 18-6-6 6-6"/>',
+  trail: '<circle cx="5" cy="19" r="2.2"/><circle cx="19" cy="5" r="2.2"/><path d="M6.5 17.5C6.5 10 17 14 17.5 6.5"/>',
+  trash:
+    '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M6 6v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6"/><path d="M10 11v6M14 11v6"/>',
 }
 
 export interface IconOpts {

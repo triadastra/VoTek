@@ -27,6 +27,42 @@ const BASE_STYLE: maplibregl.StyleSpecification = {
 const ACCURACY_SOURCE = 'gps-accuracy'
 const SPOTS_SOURCE = 'photo-spots'
 const ROUTE_SOURCE = 'route'
+const TRAIL_SOURCE = 'trail'
+
+// Catmull-Rom spline → denser polyline, so the breadcrumb trail renders as smooth curves
+// instead of straight zig-zags between the 3-second sample points.
+function smooth(points: LngLat[], steps = 10): [number, number][] {
+  if (points.length < 3) return points.map((p) => [p.lng, p.lat])
+  const out: [number, number][] = []
+  const pt = (i: number) => points[Math.max(0, Math.min(points.length - 1, i))]
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = pt(i - 1)
+    const p1 = pt(i)
+    const p2 = pt(i + 1)
+    const p3 = pt(i + 2)
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps
+      const t2 = t * t
+      const t3 = t2 * t
+      const lng =
+        0.5 *
+        (2 * p1.lng +
+          (-p0.lng + p2.lng) * t +
+          (2 * p0.lng - 5 * p1.lng + 4 * p2.lng - p3.lng) * t2 +
+          (-p0.lng + 3 * p1.lng - 3 * p2.lng + p3.lng) * t3)
+      const lat =
+        0.5 *
+        (2 * p1.lat +
+          (-p0.lat + p2.lat) * t +
+          (2 * p0.lat - 5 * p1.lat + 4 * p2.lat - p3.lat) * t2 +
+          (-p0.lat + 3 * p1.lat - 3 * p2.lat + p3.lat) * t3)
+      out.push([lng, lat])
+    }
+  }
+  const last = points[points.length - 1]
+  out.push([last.lng, last.lat])
+  return out
+}
 
 function circlePolygon(center: LngLat, radiusM: number, steps = 48): GeoJSON.Feature {
   const coords: [number, number][] = []
@@ -128,6 +164,38 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
     source: ROUTE_SOURCE,
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: { 'line-color': '#4285f4', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 9] },
+  })
+
+  // Breadcrumb trail (glow + curved line + a dot at each 3s sample point).
+  map.addSource(TRAIL_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
+  map.addSource(`${TRAIL_SOURCE}-dots`, {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  })
+  map.addLayer({
+    id: 'trail-glow',
+    type: 'line',
+    source: TRAIL_SOURCE,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#8b5bff', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 10, 18, 18], 'line-opacity': 0.25, 'line-blur': 3 },
+  })
+  map.addLayer({
+    id: 'trail-line',
+    type: 'line',
+    source: TRAIL_SOURCE,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': '#8b5bff', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 18, 8] },
+  })
+  map.addLayer({
+    id: 'trail-dots',
+    type: 'circle',
+    source: `${TRAIL_SOURCE}-dots`,
+    paint: {
+      'circle-radius': 3.4,
+      'circle-color': '#ffffff',
+      'circle-stroke-color': '#8b5bff',
+      'circle-stroke-width': 2,
+    },
   })
 
   // Photo-spot circles
@@ -238,6 +306,28 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: coords.map((c) => [c.lng, c.lat]) },
         properties: {},
+      })
+    },
+    setTrail(coords) {
+      const line = map.getSource(TRAIL_SOURCE) as GeoJSONSource | undefined
+      const dots = map.getSource(`${TRAIL_SOURCE}-dots`) as GeoJSONSource | undefined
+      if (!coords || coords.length === 0) {
+        line?.setData({ type: 'FeatureCollection', features: [] })
+        dots?.setData({ type: 'FeatureCollection', features: [] })
+        return
+      }
+      line?.setData({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: smooth(coords) },
+        properties: {},
+      })
+      dots?.setData({
+        type: 'FeatureCollection',
+        features: coords.map((c) => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
+          properties: {},
+        })),
       })
     },
     setBasemap(kind: Basemap) {

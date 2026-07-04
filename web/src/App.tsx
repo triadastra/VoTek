@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getMapProvider } from './map/createMapProvider'
 import type { Basemap, LngLat, MapProvider, Place, PhotoSpot } from './map/types'
 import { FALLBACK_CENTER, useGeolocation } from './location/useGeolocation'
+import { useTrail } from './location/useTrail'
 import { photoSpotsNear } from './data/photoSpots'
 import { getHealth, getRoute, searchPlaces, type RouteResult } from './data/api'
 import { VisionCore, type GuideMessage, type VisionStatus } from './vision/visionCore'
@@ -11,6 +12,7 @@ import { PlaceSheet, type SheetTarget } from './components/PlaceSheet'
 import { GuideOverlay } from './components/GuideOverlay'
 import { InsecureBanner } from './components/InsecureBanner'
 import { RouteBanner } from './components/RouteBanner'
+import { TrailChip } from './components/TrailChip'
 import { Icon } from './ui/Icon'
 
 function haversineM(a: LngLat, b: LngLat): number {
@@ -50,6 +52,9 @@ export default function App() {
   const [showInsecure, setShowInsecure] = useState(!window.isSecureContext)
   const [showSpots, setShowSpots] = useState(false)
   const [route, setRoute] = useState<RouteResult | null>(null)
+  const [trailActive, setTrailActive] = useState(false)
+  const [mapReady, setMapReady] = useState(false)
+  const trail = useTrail(trailActive, geo.position)
 
   const center = geo.position ?? FALLBACK_CENTER
 
@@ -67,6 +72,7 @@ export default function App() {
         return
       }
       providerRef.current = p
+      setMapReady(true)
       p.onPhotoSpotTap((s) => setSelected({ kind: 'spot', spot: s }))
       p.onPlaceTap((place) => {
         p.setSelectedPlace(place)
@@ -104,7 +110,13 @@ export default function App() {
   // only shown when the user taps the Photo spots chip.
   useEffect(() => {
     providerRef.current?.setPhotoSpots(showSpots ? spots : [])
-  }, [showSpots, spots])
+  }, [showSpots, spots, mapReady])
+
+  // Draw the breadcrumb trail whenever its points change (and once the map is ready, so a
+  // trail restored from localStorage shows on load).
+  useEffect(() => {
+    providerRef.current?.setTrail(trail.points.length ? trail.points : null)
+  }, [trail.points, mapReady])
 
   const recenter = () => {
     followRef.current = true
@@ -246,9 +258,23 @@ export default function App() {
         onZoomIn={() => providerRef.current?.zoomIn()}
         onZoomOut={() => providerRef.current?.zoomOut()}
         onRecenter={recenter}
+        trailActive={trailActive}
+        onTrail={() => setTrailActive((v) => !v)}
       />
 
       <div className="dock">
+        {(trailActive || trail.points.length > 0) && (
+          <TrailChip
+            active={trailActive}
+            points={trail.points.length}
+            distanceM={trail.distanceM}
+            onToggle={() => setTrailActive((v) => !v)}
+            onClear={() => {
+              trail.clear()
+              setTrailActive(false)
+            }}
+          />
+        )}
         <button className="guide-btn" onClick={startGuide}>
           <span className="guide-btn__ic">
             <Icon name="navigation" size={19} />

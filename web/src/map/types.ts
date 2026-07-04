@@ -63,6 +63,9 @@ export interface MapProvider {
   /** Draw a routed path (list of points) for guidance, or clear it with null. */
   setRoute(coords: LngLat[] | null): void
 
+  /** Draw the recorded breadcrumb trail (smoothed into curves), or clear it with null. */
+  setTrail(coords: LngLat[] | null): void
+
   /** Switch between the map and satellite basemaps. */
   setBasemap(kind: Basemap): void
   zoomIn(): void
