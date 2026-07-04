@@ -114,10 +114,17 @@ export function GuideOverlay({
       <div className="overlay__scrim" />
 
       <div className="overlay__top">
-        <div className={`pill ${status === 'live' ? 'live' : status === 'error' ? 'error' : ''}`}>
-          <span className="dot" />
-          {status === 'live' ? 'Guide is watching' : status === 'connecting' ? 'Connecting…' : status}
-        </div>
+        {liveMode && status === 'live' ? (
+          <div className="live-badge">
+            <Icon name="broadcast" size={14} />
+            LIVE
+          </div>
+        ) : (
+          <div className={`pill ${status === 'live' ? 'live' : status === 'error' ? 'error' : ''}`}>
+            <span className="dot" />
+            {status === 'live' ? 'Guide is watching' : status === 'connecting' ? 'Connecting…' : status}
+          </div>
+        )}
         {speechSupported() && (
           <button className="overlay__icbtn" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
             <Icon name={muted ? 'mute' : 'volume'} size={18} />

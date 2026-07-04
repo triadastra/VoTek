@@ -292,6 +292,20 @@ button { font: inherit; cursor: pointer; }
 .pill.live .dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
 .pill.error .dot { background: var(--warn); }
 
+/* LIVE badge — shown only when the Gemini live session is up and healthy. */
+.live-badge {
+  margin-right: auto; display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px 7px 11px; border-radius: 999px; font-weight: 800; font-size: 12px; letter-spacing: 1px;
+  color: #fff; background: linear-gradient(135deg, #ff2d55, #ff5b7a);
+  box-shadow: 0 0 0 3px rgba(255,45,85,0.22), 0 6px 16px rgba(255,45,85,0.4);
+  animation: livepulse 1.6s ease-in-out infinite;
+}
+.live-badge svg { animation: none; }
+@keyframes livepulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255,45,85,0.22), 0 6px 16px rgba(255,45,85,0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(255,45,85,0.0), 0 6px 16px rgba(255,45,85,0.5); }
+}
+
 /* ---- Caption + mic ---- */
 .caption-wrap {
   position: absolute; left: 16px; right: 16px; bottom: calc(var(--safe-bottom) + 20px);
