@@ -116,6 +116,10 @@ wss.on('connection', (client) => {
     onGuide: (text, partial) => send({ type: 'guide', text, partial }),
     onAudio: (data) => send({ type: 'audio', data }),
     onUser: (text) => send({ type: 'you', text }),
+    // Live audio fell back to text narration — tell the client to use browser TTS again.
+    onMode: (mode) => {
+      if (mode === 'rest') send({ type: 'hello', audio: false, mode: 'rest' })
+    },
   })
   guide.start()
   // Tell the client up-front whether Gemini native audio is available (live vs mock).

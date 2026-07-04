@@ -134,10 +134,17 @@ export class VisionCore {
         const msg = JSON.parse(ev.data)
         switch (msg.type) {
           case 'hello':
-            // The broker tells us whether this is a live Gemini-audio session.
+            // The broker tells us whether this is a live Gemini-audio session. It can flip to
+            // false mid-session if live audio fell back to text narration.
             this.serverAudio = !!msg.audio
             this.events.onLive?.(this.serverAudio)
-            if (this.serverAudio) this.startMic()
+            if (this.serverAudio) {
+              this.startMic()
+            } else {
+              this.mic?.stop()
+              this.mic = null
+              this.player.stop()
+            }
             break
           case 'guide':
             // When Gemini streams its own audio, don't also browser-TTS the caption.

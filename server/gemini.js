@@ -82,32 +82,62 @@ export async function guideOnce({ apiKey, context, jpegBase64, question }) {
  * onGuide(text, partial) callbacks.
  */
 export class GuideSession {
-  constructor({ apiKey, model, onGuide, onAudio, onUser }) {
+  constructor({ apiKey, model, onGuide, onAudio, onUser, onMode }) {
     this.apiKey = apiKey
     this.model = model || 'gemini-2.0-flash-live-001'
     this.onGuide = onGuide // (text, partial) — narration captions
     this.onAudio = onAudio || (() => {}) // (base64 pcm16 24k) — Gemini's spoken audio
     this.onUser = onUser || (() => {}) // (text) — transcript of what the user said
+    this.onMode = onMode || (() => {}) // ('rest') — tell client we fell back to text narration
     this.context = null
     this.upstream = null
     this.mock = !apiKey
     this.mockTimer = null
     this.mockIdx = 0
+    // Resilience: if the live stream errors, closes, or produces nothing quickly, fall back
+    // to REST narration over the same connection so the guide always transcribes + helps.
+    this.rest = false
+    this.gotServerContent = false
+    this.restBusy = false
+    this.frameN = 0
+    this.watchdog = null
+    this.stopped = false
   }
 
   start() {
     if (this.mock) return // mock narration is driven by frames/context
-    const url =
-      'wss://generativelanguage.googleapis.com/ws/' +
-      'google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent' +
-      `?key=${this.apiKey}`
-    this.upstream = new WebSocket(url)
-    this.upstream.on('open', () => this.sendSetup())
-    this.upstream.on('message', (data) => this.handleUpstream(data))
-    this.upstream.on('error', (err) => this.onGuide(`connection error: ${err.message}`, false))
+    try {
+      const url =
+        'wss://generativelanguage.googleapis.com/ws/' +
+        'google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent' +
+        `?key=${this.apiKey}`
+      this.upstream = new WebSocket(url)
+      this.upstream.on('open', () => this.sendSetup())
+      this.upstream.on('message', (data) => this.handleUpstream(data))
+      this.upstream.on('error', () => this.enterRestMode())
+      this.upstream.on('close', () => {
+        if (!this.gotServerContent) this.enterRestMode()
+      })
+    } catch {
+      this.enterRestMode()
+    }
+  }
+
+  // Live audio failed / went silent — narrate from frames via REST so it keeps helping.
+  enterRestMode() {
+    if (this.rest || this.mock || this.stopped) return
+    this.rest = true
+    clearTimeout(this.watchdog)
+    this.onMode('rest') // client: drop live-audio expectation, use browser TTS
+    this.onGuide('Reconnecting your guide…', false)
   }
 
   sendSetup() {
+    // If the live session says nothing within a few seconds, assume it isn't working here.
+    clearTimeout(this.watchdog)
+    this.watchdog = setTimeout(() => {
+      if (!this.gotServerContent) this.enterRestMode()
+    }, 8000)
     // Full live config: spoken AUDIO output plus transcripts of both sides (for captions).
     const setup = {
       setup: {
@@ -130,6 +160,8 @@ export class GuideSession {
     }
     const sc = msg?.serverContent
     if (!sc) return
+    this.gotServerContent = true
+    clearTimeout(this.watchdog)
 
     // Spoken audio + any text parts from the model.
     const parts = sc.modelTurn?.parts
@@ -184,6 +216,10 @@ export class GuideSession {
       this.primeMock()
       return
     }
+    if (this.rest) {
+      this.restNarrate(jpegBase64)
+      return
+    }
     if (this.upstream?.readyState !== WebSocket.OPEN) return
     this.upstream.send(
       JSON.stringify({
@@ -192,6 +228,20 @@ export class GuideSession {
         },
       }),
     )
+  }
+
+  // REST fallback narration: describe roughly every 3rd frame (~4–5s), one at a time.
+  restNarrate(jpegBase64) {
+    this.frameN++
+    if (this.restBusy || this.frameN % 3 !== 1) return
+    this.restBusy = true
+    guideOnce({ apiKey: this.apiKey, context: this.context, jpegBase64 })
+      .then((text) => {
+        if (text && !this.stopped) this.onGuide(text, false)
+      })
+      .finally(() => {
+        this.restBusy = false
+      })
   }
 
   // Continuous mic audio (PCM16/16kHz). Streaming this enables Gemini's voice-activity
@@ -238,9 +288,15 @@ export class GuideSession {
   }
 
   stop() {
+    this.stopped = true
+    clearTimeout(this.watchdog)
     if (this.mockTimer) clearInterval(this.mockTimer)
     this.mockTimer = null
-    this.upstream?.close()
+    try {
+      this.upstream?.close()
+    } catch {
+      /* noop */
+    }
     this.upstream = null
   }
 }

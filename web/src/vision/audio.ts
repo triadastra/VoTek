@@ -53,6 +53,7 @@ export class MicStreamer {
     this.source.connect(this.proc)
     this.proc.connect(silent)
     silent.connect(this.ctx.destination)
+    this.ctx.resume().catch(() => {})
   }
 
   setMuted(m: boolean) {
@@ -83,6 +84,7 @@ export class PlaybackQueue {
     if (!this.ctx) {
       const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       this.ctx = new AC()
+      this.ctx.resume().catch(() => {})
       this.nextTime = 0
     }
     return this.ctx
