@@ -46,7 +46,7 @@ export default function App() {
   useEffect(() => {
     const p = providerRef.current
     if (!p || !geo.position) return
-    p.setUserLocation(geo.position, geo.heading ?? undefined)
+    p.setUserLocation(geo.position, geo.heading ?? undefined, geo.accuracy ?? undefined)
     if (followRef.current) p.flyTo(geo.position)
     const nearby = photoSpotsNear(geo.position)
     setSpots(nearby)
@@ -54,10 +54,11 @@ export default function App() {
     // Keep the guide's grounding context fresh while it's live.
     visionRef.current?.updateContext({
       location: geo.position,
+      accuracy: geo.accuracy,
       heading: geo.heading,
       nearby: nearby.map((s) => s.name),
     })
-  }, [geo.position, geo.heading])
+  }, [geo.position, geo.heading, geo.accuracy])
 
   const recenter = () => {
     followRef.current = true
@@ -93,10 +94,11 @@ export default function App() {
     setGuideOpen(true)
     core.connect({
       location: geo.position,
+      accuracy: geo.accuracy,
       heading: geo.heading,
       nearby: spots.map((s) => s.name),
     })
-  }, [geo.position, geo.heading, spots])
+  }, [geo.position, geo.heading, geo.accuracy, spots])
 
   const stopGuide = () => {
     visionRef.current?.disconnect()
@@ -122,7 +124,11 @@ export default function App() {
         </div>
         <div className={`pill ${geo.error ? 'error' : geo.position ? 'live' : ''}`}>
           <span className="dot" />
-          {geo.error ? 'No location' : geo.position ? 'Located' : 'Locating…'}
+          {geo.error
+            ? 'GPS off'
+            : geo.position
+              ? `GPS · ±${Math.round(geo.accuracy ?? 0)}m`
+              : 'Locating…'}
         </div>
       </div>
 

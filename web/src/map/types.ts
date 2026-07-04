@@ -29,8 +29,8 @@ export interface MapProviderOptions {
 export interface MapProvider {
   /** Recenter/animate the camera to a position. */
   flyTo(pos: LngLat, zoom?: number): void
-  /** Update the user's position dot + heading (degrees, optional). */
-  setUserLocation(pos: LngLat, headingDeg?: number): void
+  /** Update the user's position dot + heading (degrees) + GPS accuracy radius (meters). */
+  setUserLocation(pos: LngLat, headingDeg?: number, accuracyM?: number): void
   /** Render the photo-spot circle overlays. Called whenever the set changes. */
   setPhotoSpots(spots: PhotoSpot[]): void
   /** Fired when the user taps a photo-spot circle. */

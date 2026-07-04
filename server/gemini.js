@@ -1,18 +1,26 @@
 import WebSocket from 'ws'
 
-// Builds the tour-guide system prompt from live context (location + nearby spots).
+// Builds the tour-guide system prompt from live context (precise location, place, spots).
 export function buildSystemPrompt(context) {
-  const loc = context?.location
-    ? `The user is at latitude ${context.location.lat.toFixed(5)}, longitude ${context.location.lng.toFixed(5)}.`
+  const c = context?.location
+  const loc = c
+    ? `The user's precise GPS position is latitude ${c.lat.toFixed(6)}, longitude ${c.lng.toFixed(6)}` +
+      (context.accuracy != null ? ` (±${Math.round(context.accuracy)}m accuracy)` : '') +
+      (context.heading != null ? `, facing ${Math.round(context.heading)}° (compass heading)` : '') +
+      '.'
     : 'The user location is not yet known.'
+  const place = context?.place ? `They are at or near: ${context.place}.` : ''
   const nearby =
     context?.nearby?.length ? `Notable nearby photo spots: ${context.nearby.join(', ')}.` : ''
   return [
-    'You are VoTek, a warm, concise walking tour guide who can SEE the user\'s live camera.',
+    'You are VoTek, a warm, concise walking tour guide who can SEE the user\'s live camera',
+    'and knows their exact location from the map.',
+    'Use the location and place name to ground everything you say in real, specific history.',
     'Narrate the history and significance of what is in view in 1–2 short sentences at a time.',
     'When you notice a great photo composition, say where to stand and how to frame it.',
     'Never mention that you are an AI or describe the raw image; speak as a guide on the street.',
     loc,
+    place,
     nearby,
   ]
     .filter(Boolean)
@@ -74,10 +82,36 @@ export class GuideSession {
   }
 
   pushContext(context) {
+    const prevPlace = this.context?.place
     this.context = context
-    // On a live connection the system prompt is fixed at setup; richer implementations
-    // re-send grounding as a text turn. For the scaffold we refresh mock narration.
-    if (this.mock) this.primeMock()
+    if (this.mock) {
+      this.primeMock()
+      return
+    }
+    // The system prompt is fixed at setup, so when the resolved place changes we feed the
+    // model fresh grounding as a text turn — this is how it "gets where you are" mid-session.
+    if (context?.place && context.place !== prevPlace && this.upstream?.readyState === WebSocket.OPEN) {
+      this.upstream.send(
+        JSON.stringify({
+          clientContent: {
+            turns: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text:
+                      `[location update] I am now at ${context.place} ` +
+                      `(${context.location?.lat?.toFixed(6)}, ${context.location?.lng?.toFixed(6)}). ` +
+                      'Keep guiding me based on where I actually am.',
+                  },
+                ],
+              },
+            ],
+            turnComplete: false,
+          },
+        }),
+      )
+    }
   }
 
   pushFrame(jpegBase64) {
@@ -111,8 +145,11 @@ export class GuideSession {
 
   mockLines() {
     const near = this.context?.nearby?.[0]
+    const place = this.context?.place
     return [
-      'Welcome — I can see what you see. Let\'s take a look around.',
+      place
+        ? `Welcome to ${place} — I can see what you see, and I know exactly where you are.`
+        : 'Welcome — I can see what you see. Let\'s take a look around.',
       near
         ? `Just ahead is what locals call the "${near}". It has a story worth hearing.`
         : 'This street has more history than it lets on.',

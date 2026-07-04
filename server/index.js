@@ -1,8 +1,13 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:http'
+import { fileURLToPath } from 'node:url'
+import { dirname, join, resolve } from 'node:path'
 import express from 'express'
 import { WebSocketServer } from 'ws'
 import { GuideSession } from './gemini.js'
+import { reverseGeocode } from './geocode.js'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Minimal .env loader (no dependency).
 try {
@@ -32,6 +37,26 @@ app.post('/api/session-token', (_req, res) => {
   res.json({ token: null, mode: API_KEY ? 'live' : 'mock' })
 })
 
+// In production the broker also serves the built web app, so everything is one origin
+// (no CORS, the /vision websocket shares the host). WEB_DIST defaults to the Docker layout
+// (./public) and falls back to the local monorepo build (../web/dist) for `npm start`.
+const WEB_DIST = process.env.WEB_DIST
+  ? resolve(process.env.WEB_DIST)
+  : existsSync(join(__dirname, 'public'))
+    ? join(__dirname, 'public')
+    : join(__dirname, '..', 'web', 'dist')
+
+if (existsSync(WEB_DIST)) {
+  app.use(express.static(WEB_DIST))
+  // SPA fallback: let the client router handle non-API, non-asset routes.
+  app.get(/^\/(?!api\/|vision).*/, (_req, res) => {
+    res.sendFile(join(WEB_DIST, 'index.html'))
+  })
+  console.log(`Serving web app from ${WEB_DIST}`)
+} else {
+  console.log('No web build found — API/websocket only (use the Vite dev server for the UI).')
+}
+
 const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/vision' })
 
@@ -54,8 +79,19 @@ wss.on('connection', (client) => {
     } catch {
       return
     }
-    if (msg.type === 'context') guide.pushContext(msg.context)
-    else if (msg.type === 'frame') guide.pushFrame(msg.jpegBase64)
+    if (msg.type === 'context') {
+      // Resolve the precise GPS fix to a real place from map data, then ground the guide.
+      const ctx = msg.context || {}
+      if (ctx.location) {
+        reverseGeocode(ctx.location.lat, ctx.location.lng)
+          .then((place) => guide.pushContext({ ...ctx, place }))
+          .catch(() => guide.pushContext(ctx))
+      } else {
+        guide.pushContext(ctx)
+      }
+    } else if (msg.type === 'frame') {
+      guide.pushFrame(msg.jpegBase64)
+    }
   })
 
   client.on('close', () => guide.stop())

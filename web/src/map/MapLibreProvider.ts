@@ -20,6 +20,22 @@ const FREE_STYLE: maplibregl.StyleSpecification = {
 }
 
 const SPOTS_SOURCE = 'photo-spots'
+const ACCURACY_SOURCE = 'gps-accuracy'
+
+// Approximate a geodesic circle (meters) as a polygon so the GPS accuracy ring scales
+// correctly with zoom (MapLibre's circle radius is in pixels, not meters).
+function circlePolygon(center: LngLat, radiusM: number, steps = 48): GeoJSON.Feature {
+  const coords: [number, number][] = []
+  const earth = 6378137
+  const lat = (center.lat * Math.PI) / 180
+  for (let i = 0; i <= steps; i++) {
+    const theta = (i / steps) * 2 * Math.PI
+    const dLat = (radiusM * Math.cos(theta)) / earth
+    const dLng = (radiusM * Math.sin(theta)) / (earth * Math.cos(lat))
+    coords.push([center.lng + (dLng * 180) / Math.PI, center.lat + (dLat * 180) / Math.PI])
+  }
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} }
+}
 
 function toFeatureCollection(spots: PhotoSpot[]): GeoJSON.FeatureCollection {
   return {
@@ -52,6 +68,24 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
   let currentSpots: PhotoSpot[] = []
 
   await new Promise<void>((resolve) => map.on('load', () => resolve()))
+
+  // GPS accuracy ring — rendered beneath everything so it reads as "live GPS is on".
+  map.addSource(ACCURACY_SOURCE, {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  })
+  map.addLayer({
+    id: 'gps-accuracy-fill',
+    type: 'fill',
+    source: ACCURACY_SOURCE,
+    paint: { 'fill-color': '#5b8cff', 'fill-opacity': 0.12 },
+  })
+  map.addLayer({
+    id: 'gps-accuracy-line',
+    type: 'line',
+    source: ACCURACY_SOURCE,
+    paint: { 'line-color': '#5b8cff', 'line-opacity': 0.5, 'line-width': 1 },
+  })
 
   map.addSource(SPOTS_SOURCE, { type: 'geojson', data: toFeatureCollection([]) })
 
@@ -87,9 +121,15 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
     flyTo(pos: LngLat, zoom?: number) {
       map.flyTo({ center: [pos.lng, pos.lat], zoom: zoom ?? map.getZoom(), speed: 0.8 })
     },
-    setUserLocation(pos: LngLat, headingDeg?: number) {
+    setUserLocation(pos: LngLat, headingDeg?: number, accuracyM?: number) {
       userMarker.setLngLat([pos.lng, pos.lat]).addTo(map)
       if (headingDeg != null) userMarker.setRotation(headingDeg)
+      const accSrc = map.getSource(ACCURACY_SOURCE) as GeoJSONSource | undefined
+      accSrc?.setData(
+        accuracyM && accuracyM > 0
+          ? { type: 'FeatureCollection', features: [circlePolygon(pos, accuracyM)] }
+          : { type: 'FeatureCollection', features: [] },
+      )
     },
     setPhotoSpots(spots: PhotoSpot[]) {
       currentSpots = spots

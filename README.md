@@ -9,7 +9,35 @@ of what you're looking at, and circles the best spots to take photos.
 > Live (Flash)** through a **broker** that keeps the API key server-side. See
 > [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-## Run it locally
+## Run it with Docker (single hosted container)
+
+One container builds the web app and serves it from the broker, so the UI, the `/api`
+endpoints, and the `/vision` websocket all share one origin.
+
+```bash
+# Build + run (mock guide, no key needed)
+docker compose up --build            # → http://localhost:8787
+
+# Or with the real Gemini guide:
+GEMINI_API_KEY=your_key docker compose up --build
+```
+
+Or with plain Docker:
+
+```bash
+docker build -t votek .
+docker run -p 8787:8787 -e GEMINI_API_KEY=your_key votek   # omit -e for mock mode
+```
+
+Then open **http://localhost:8787**. Camera + GPS need HTTPS in production — put the container
+behind a TLS-terminating reverse proxy (or a tunnel like `ngrok http 8787`) so the browser
+grants camera/location.
+
+> **Behind a TLS-inspecting proxy** (corporate network / some CI)? Pass your CA at build time so
+> `npm` trusts the registry — nothing is baked into the image:
+> `docker build --secret id=ca,src=/path/to/ca-bundle.crt -t votek .`
+
+## Run it locally (dev, two processes)
 
 Two processes: the **broker** (`/server`) and the **web app** (`/web`).
 
@@ -37,11 +65,14 @@ grants camera/GPS.
 
 ## What's here today
 
-- ✅ Live map + your location dot + heading (MapLibre, custom UI — no default map chrome)
-- ✅ Our own mobile UI shell (dark, glassy)
+- ✅ Live map + high-accuracy **GPS** location dot + heading + accuracy ring (MapLibre, custom UI)
+- ✅ Our own mobile UI shell (dark, glassy) with a live GPS status readout
 - ✅ Photo-spot **circle overlays** (stubbed dataset) with a detail sheet
 - ✅ Camera guide overlay + vision core streaming frames to the broker
+- ✅ **Precise location grounding** — the broker reverse-geocodes your GPS fix to a real place
+  (via OpenStreetMap) and feeds location + accuracy + heading + place name into the guide
 - ✅ Broker with mock fallback and a Gemini Live relay path
+- ✅ Dockerized: one container serves the web app + broker
 
 ## Next
 

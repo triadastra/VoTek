@@ -21,9 +21,13 @@ export type VisionStatus = 'idle' | 'connecting' | 'live' | 'error'
 
 export interface VisionContext {
   location: LngLat | null
+  /** GPS accuracy radius in meters, so the guide knows how precise the fix is. */
+  accuracy: number | null
   heading: number | null
   /** Names of nearby POIs / photo spots, to ground the narration. */
   nearby: string[]
+  /** Human-readable place resolved from the map data (filled in by the broker). */
+  place?: string | null
 }
 
 const FRAME_INTERVAL_MS = 1500 // send ~1 frame every 1.5s — gate to control cost/latency
