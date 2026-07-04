@@ -1,29 +1,31 @@
 import maplibregl, { Map as MlMap, GeoJSONSource, Marker } from 'maplibre-gl'
-import type { LngLat, MapProvider, MapProviderOptions, PhotoSpot } from './types'
+import type { Basemap, Bounds, LngLat, MapProvider, MapProviderOptions, Place, PhotoSpot } from './types'
 
-// A free, key-less raster style built on OpenStreetMap tiles. Swap for a vector style
-// (MapTiler/Stadia) later for a more polished look — no other code changes needed.
-const FREE_STYLE: maplibregl.StyleSpecification = {
+// CARTO Voyager — a clean, free, key-less basemap that reads like Google Maps.
+// ESRI World Imagery — free satellite tiles. Both toggled via layer visibility.
+const CARTO = ['a', 'b', 'c', 'd'].map(
+  (s) => `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png`,
+)
+const SATELLITE = [
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+]
+
+const BASE_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
-    },
+    carto: { type: 'raster', tiles: CARTO, tileSize: 256, attribution: '© OpenStreetMap, © CARTO' },
+    satellite: { type: 'raster', tiles: SATELLITE, tileSize: 256, attribution: 'Imagery © Esri' },
   },
   layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#0b0f17' } },
-    { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-brightness-max': 0.85 } },
+    { id: 'bg', type: 'background', paint: { 'background-color': '#eef1f5' } },
+    { id: 'carto', type: 'raster', source: 'carto' },
+    { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } },
   ],
 }
 
-const SPOTS_SOURCE = 'photo-spots'
 const ACCURACY_SOURCE = 'gps-accuracy'
+const SPOTS_SOURCE = 'photo-spots'
 
-// Approximate a geodesic circle (meters) as a polygon so the GPS accuracy ring scales
-// correctly with zoom (MapLibre's circle radius is in pixels, not meters).
 function circlePolygon(center: LngLat, radiusM: number, steps = 48): GeoJSON.Feature {
   const coords: [number, number][] = []
   const earth = 6378137
@@ -37,59 +39,77 @@ function circlePolygon(center: LngLat, radiusM: number, steps = 48): GeoJSON.Fea
   return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} }
 }
 
-function toFeatureCollection(spots: PhotoSpot[]): GeoJSON.FeatureCollection {
+function spotsFC(spots: PhotoSpot[]): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
     features: spots.map((s) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [s.position.lng, s.position.lat] },
-      properties: { id: s.id, name: s.name, score: s.score, blurb: s.blurb },
+      properties: { id: s.id, score: s.score },
     })),
   }
+}
+
+const CATEGORY_ICON: Record<string, string> = {
+  restaurant: '🍽️',
+  cafe: '☕',
+  coffee: '☕',
+  bar: '🍸',
+  hotel: '🛏️',
+  lodging: '🛏️',
+  museum: '🏛️',
+  park: '🌳',
+  shop: '🛍️',
+  viewpoint: '📸',
+  attraction: '⭐',
+}
+
+function iconFor(category?: string): string {
+  if (!category) return '📍'
+  const key = Object.keys(CATEGORY_ICON).find((k) => category.toLowerCase().includes(k))
+  return key ? CATEGORY_ICON[key] : '📍'
 }
 
 export async function createMapLibreProvider(opts: MapProviderOptions): Promise<MapProvider> {
   const map = new MlMap({
     container: opts.container,
-    style: FREE_STYLE,
+    style: BASE_STYLE,
     center: [opts.center.lng, opts.center.lat],
     zoom: opts.zoom,
     attributionControl: { compact: true },
     // Our own UI supplies all controls — no default map chrome.
   })
 
-  // Build our own location dot (default marker replaced with a styled element).
   const dotEl = document.createElement('div')
   dotEl.className = 'user-dot'
   dotEl.innerHTML = '<span class="user-dot__pulse"></span><span class="user-dot__core"></span>'
   const userMarker = new Marker({ element: dotEl, rotationAlignment: 'map' })
 
-  let spotTapCb: ((spot: PhotoSpot) => void) | null = null
+  const placeMarkers: Marker[] = []
+  let selectedMarker: Marker | null = null
+  let spotTapCb: ((s: PhotoSpot) => void) | null = null
+  let placeTapCb: ((p: Place) => void) | null = null
   let currentSpots: PhotoSpot[] = []
 
   await new Promise<void>((resolve) => map.on('load', () => resolve()))
 
-  // GPS accuracy ring — rendered beneath everything so it reads as "live GPS is on".
-  map.addSource(ACCURACY_SOURCE, {
-    type: 'geojson',
-    data: { type: 'FeatureCollection', features: [] },
-  })
+  // GPS accuracy ring
+  map.addSource(ACCURACY_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } })
   map.addLayer({
     id: 'gps-accuracy-fill',
     type: 'fill',
     source: ACCURACY_SOURCE,
-    paint: { 'fill-color': '#5b8cff', 'fill-opacity': 0.12 },
+    paint: { 'fill-color': '#4285f4', 'fill-opacity': 0.12 },
   })
   map.addLayer({
     id: 'gps-accuracy-line',
     type: 'line',
     source: ACCURACY_SOURCE,
-    paint: { 'line-color': '#5b8cff', 'line-opacity': 0.5, 'line-width': 1 },
+    paint: { 'line-color': '#4285f4', 'line-opacity': 0.4, 'line-width': 1 },
   })
 
-  map.addSource(SPOTS_SOURCE, { type: 'geojson', data: toFeatureCollection([]) })
-
-  // Halo circle sized + colored by score.
+  // Photo-spot circles
+  map.addSource(SPOTS_SOURCE, { type: 'geojson', data: spotsFC([]) })
   map.addLayer({
     id: 'photo-spots-halo',
     type: 'circle',
@@ -106,22 +126,33 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
     id: 'photo-spots-core',
     type: 'circle',
     source: SPOTS_SOURCE,
-    paint: { 'circle-radius': 5, 'circle-color': '#c9b8ff' },
+    paint: { 'circle-radius': 5, 'circle-color': '#7a4dff' },
   })
-
   map.on('click', 'photo-spots-halo', (e) => {
     const id = e.features?.[0]?.properties?.id
     const spot = currentSpots.find((s) => s.id === id)
     if (spot && spotTapCb) spotTapCb(spot)
   })
-  map.on('mouseenter', 'photo-spots-halo', () => (map.getCanvas().style.cursor = 'pointer'))
-  map.on('mouseleave', 'photo-spots-halo', () => (map.getCanvas().style.cursor = ''))
+
+  function clearPlaceMarkers() {
+    placeMarkers.forEach((m) => m.remove())
+    placeMarkers.length = 0
+  }
 
   return {
-    flyTo(pos: LngLat, zoom?: number) {
-      map.flyTo({ center: [pos.lng, pos.lat], zoom: zoom ?? map.getZoom(), speed: 0.8 })
+    flyTo(pos, zoom) {
+      map.flyTo({ center: [pos.lng, pos.lat], zoom: zoom ?? map.getZoom(), speed: 0.9 })
     },
-    setUserLocation(pos: LngLat, headingDeg?: number, accuracyM?: number) {
+    fitBounds(b: Bounds, padding = 80) {
+      map.fitBounds(
+        [
+          [b.sw.lng, b.sw.lat],
+          [b.ne.lng, b.ne.lat],
+        ],
+        { padding, maxZoom: 17, duration: 700 },
+      )
+    },
+    setUserLocation(pos, headingDeg, accuracyM) {
       userMarker.setLngLat([pos.lng, pos.lat]).addTo(map)
       if (headingDeg != null) userMarker.setRotation(headingDeg)
       const accSrc = map.getSource(ACCURACY_SOURCE) as GeoJSONSource | undefined
@@ -131,15 +162,69 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
           : { type: 'FeatureCollection', features: [] },
       )
     },
-    setPhotoSpots(spots: PhotoSpot[]) {
+    setPhotoSpots(spots) {
       currentSpots = spots
       const src = map.getSource(SPOTS_SOURCE) as GeoJSONSource | undefined
-      src?.setData(toFeatureCollection(spots))
+      src?.setData(spotsFC(spots))
     },
     onPhotoSpotTap(cb) {
       spotTapCb = cb
     },
+    setPlaces(places) {
+      clearPlaceMarkers()
+      for (const p of places) {
+        const el = document.createElement('button')
+        el.className = 'poi-pin'
+        el.innerHTML = `<span class="poi-pin__icon">${iconFor(p.category)}</span>`
+        el.onclick = (ev) => {
+          ev.stopPropagation()
+          placeTapCb?.(p)
+        }
+        const m = new Marker({ element: el, anchor: 'bottom' }).setLngLat([p.position.lng, p.position.lat]).addTo(map)
+        placeMarkers.push(m)
+      }
+    },
+    onPlaceTap(cb) {
+      placeTapCb = cb
+    },
+    setSelectedPlace(place) {
+      selectedMarker?.remove()
+      selectedMarker = null
+      if (!place) return
+      const el = document.createElement('div')
+      el.className = 'sel-pin'
+      el.innerHTML = `<span class="sel-pin__head">${iconFor(place.category)}</span><span class="sel-pin__stem"></span>`
+      selectedMarker = new Marker({ element: el, anchor: 'bottom' })
+        .setLngLat([place.position.lng, place.position.lat])
+        .addTo(map)
+    },
+    setBasemap(kind: Basemap) {
+      map.setLayoutProperty('satellite', 'visibility', kind === 'satellite' ? 'visible' : 'none')
+      map.setLayoutProperty('carto', 'visibility', kind === 'satellite' ? 'none' : 'visible')
+    },
+    zoomIn() {
+      map.zoomIn()
+    },
+    zoomOut() {
+      map.zoomOut()
+    },
+    getCenter() {
+      const c = map.getCenter()
+      return { lng: c.lng, lat: c.lat }
+    },
+    getBounds() {
+      const b = map.getBounds()
+      return {
+        sw: { lng: b.getWest(), lat: b.getSouth() },
+        ne: { lng: b.getEast(), lat: b.getNorth() },
+      }
+    },
+    onMoveEnd(cb) {
+      map.on('moveend', cb)
+    },
     destroy() {
+      clearPlaceMarkers()
+      selectedMarker?.remove()
       userMarker.remove()
       map.remove()
     },

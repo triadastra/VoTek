@@ -65,14 +65,27 @@ grants camera/GPS.
 
 ## What's here today
 
-- ✅ Live map + high-accuracy **GPS** location dot + heading + accuracy ring (MapLibre, custom UI)
-- ✅ Our own mobile UI shell (dark, glassy) with a live GPS status readout
-- ✅ Photo-spot **circle overlays** (stubbed dataset) with a detail sheet
+- ✅ **Google/Apple-Maps-style map** — clean CARTO basemap + **satellite toggle**, our own
+  zoom / recenter / layers controls (no default map chrome)
+- ✅ **Search** for places (Nominatim) and **category browsing** — Coffee, Food, Hotels,
+  Museums, Parks, Bars — as real POI pins (Overpass), with result & detail cards
+- ✅ Live high-accuracy **GPS** location dot + heading + accuracy ring
+- ✅ Photo-spot **circle overlays** (stubbed dataset) with distance + score in the place sheet
 - ✅ Camera guide overlay + vision core streaming frames to the broker
 - ✅ **Precise location grounding** — the broker reverse-geocodes your GPS fix to a real place
-  (via OpenStreetMap) and feeds location + accuracy + heading + place name into the guide
+  and feeds location + accuracy + heading + place name into the guide
+- ✅ Graceful **HTTPS handling** — off a secure origin, camera/GPS show a clear banner instead
+  of crashing; the map still works
 - ✅ Broker with mock fallback and a Gemini Live relay path
 - ✅ Dockerized: one container serves the web app + broker
+
+## ⚠️ Camera + GPS require HTTPS
+
+Browsers only expose the camera (`getUserMedia`) and precise location in a **secure context**
+— i.e. `https://` or `localhost`. If you host over plain **http://** (e.g. a bare IP), the map
+still works but the live guide and GPS are blocked by the browser. Put the container behind a
+TLS-terminating proxy, or use a tunnel like `ngrok http 8787` / a platform that gives HTTPS
+(Render, Fly.io, Railway) — see below.
 
 ## Next
 

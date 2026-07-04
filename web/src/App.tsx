@@ -1,11 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getMapProvider } from './map/createMapProvider'
-import type { MapProvider, PhotoSpot } from './map/types'
+import type { Basemap, LngLat, MapProvider, Place, PhotoSpot } from './map/types'
 import { FALLBACK_CENTER, useGeolocation } from './location/useGeolocation'
 import { photoSpotsNear } from './data/photoSpots'
+import { getHealth, searchPlaces } from './data/api'
 import { VisionCore, type GuideMessage, type VisionStatus } from './vision/visionCore'
+import { SearchBar } from './components/SearchBar'
+import { MapControls } from './components/MapControls'
+import { PlaceSheet, type SheetTarget } from './components/PlaceSheet'
 import { GuideOverlay } from './components/GuideOverlay'
-import { PhotoSpotSheet } from './components/PhotoSpotSheet'
+import { InsecureBanner } from './components/InsecureBanner'
+
+function boundsOf(points: LngLat[]) {
+  const lngs = points.map((p) => p.lng)
+  const lats = points.map((p) => p.lat)
+  return {
+    sw: { lng: Math.min(...lngs), lat: Math.min(...lats) },
+    ne: { lng: Math.max(...lngs), lat: Math.max(...lats) },
+  }
+}
 
 export default function App() {
   const mapRef = useRef<HTMLDivElement>(null)
@@ -15,12 +28,20 @@ export default function App() {
 
   const geo = useGeolocation()
   const [spots, setSpots] = useState<PhotoSpot[]>([])
-  const [selected, setSelected] = useState<PhotoSpot | null>(null)
+  const [results, setResults] = useState<Place[]>([])
+  const [selected, setSelected] = useState<SheetTarget | null>(null)
+  const [basemap, setBasemap] = useState<Basemap>('map')
   const [guideOpen, setGuideOpen] = useState(false)
   const [visionStatus, setVisionStatus] = useState<VisionStatus>('idle')
   const [messages, setMessages] = useState<GuideMessage[]>([])
+  const [mode, setMode] = useState<'live' | 'mock' | null>(null)
+  const [showInsecure, setShowInsecure] = useState(!window.isSecureContext)
 
   const center = geo.position ?? FALLBACK_CENTER
+
+  useEffect(() => {
+    getHealth().then((h) => setMode(h?.mode ?? null))
+  }, [])
 
   // --- Init map once ---
   useEffect(() => {
@@ -32,7 +53,14 @@ export default function App() {
         return
       }
       providerRef.current = p
-      p.onPhotoSpotTap((s) => setSelected(s))
+      p.onPhotoSpotTap((s) => setSelected({ kind: 'spot', spot: s }))
+      p.onPlaceTap((place) => {
+        p.setSelectedPlace(place)
+        setSelected({ kind: 'place', place })
+      })
+      p.onMoveEnd(() => {
+        followRef.current = false
+      })
     })
     return () => {
       disposed = true
@@ -42,7 +70,7 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // --- Push live location + refresh spots ---
+  // --- Live location + nearby photo spots ---
   useEffect(() => {
     const p = providerRef.current
     if (!p || !geo.position) return
@@ -51,7 +79,6 @@ export default function App() {
     const nearby = photoSpotsNear(geo.position)
     setSpots(nearby)
     p.setPhotoSpots(nearby)
-    // Keep the guide's grounding context fresh while it's live.
     visionRef.current?.updateContext({
       location: geo.position,
       accuracy: geo.accuracy,
@@ -65,28 +92,53 @@ export default function App() {
     if (geo.position) providerRef.current?.flyTo(geo.position, 16)
   }
 
+  // --- Search ---
+  const runSearch = useCallback(async (q: string, bounded = false) => {
+    const p = providerRef.current
+    if (!p) return
+    if (q === '__photospots__') {
+      // "Photo spots" chip: frame the ranked vantage points already on the map.
+      if (spots.length) p.fitBounds(boundsOf(spots.map((s) => s.position)))
+      return
+    }
+    const found = await searchPlaces(q, p.getBounds(), bounded)
+    setResults(found)
+    p.setPlaces(found)
+    p.setSelectedPlace(null)
+    if (found.length) p.fitBounds(boundsOf(found.map((r) => r.position)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spots])
+
+  const pickResult = (place: Place) => {
+    const p = providerRef.current
+    if (!p) return
+    p.setSelectedPlace(place)
+    p.flyTo(place.position, 16)
+    setSelected({ kind: 'place', place })
+  }
+
+  const clearSearch = () => {
+    setResults([])
+    providerRef.current?.setPlaces([])
+    providerRef.current?.setSelectedPlace(null)
+  }
+
   // --- Guide session ---
   const startGuide = useCallback(async () => {
-    // iOS needs a user gesture to request the motion/orientation permission.
     const anyDO = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> }
     if (typeof anyDO?.requestPermission === 'function') {
       try {
         await anyDO.requestPermission()
       } catch {
-        /* user declined compass — narration still works */
+        /* declined compass */
       }
     }
-
     const core = new VisionCore({
       onStatus: setVisionStatus,
       onMessage: (msg) =>
-        setMessages((prev) => {
-          // Replace the trailing partial with the newest chunk, else append.
-          if (prev.length && prev[prev.length - 1].partial) {
-            return [...prev.slice(0, -1), msg]
-          }
-          return [...prev, msg]
-        }),
+        setMessages((prev) =>
+          prev.length && prev[prev.length - 1].partial ? [...prev.slice(0, -1), msg] : [...prev, msg],
+        ),
       onError: (e) => setMessages((prev) => [...prev, { role: 'guide', text: `⚠︎ ${e}` }]),
     })
     visionRef.current = core
@@ -109,7 +161,7 @@ export default function App() {
 
   const attachVideo = useCallback((el: HTMLVideoElement) => {
     visionRef.current?.startCamera(el).catch((err) => {
-      setMessages((prev) => [...prev, { role: 'guide', text: `⚠︎ Camera unavailable: ${err.message}` }])
+      setMessages((prev) => [...prev, { role: 'guide', text: `⚠︎ ${err.message}` }])
     })
   }, [])
 
@@ -117,53 +169,59 @@ export default function App() {
     <div className="app">
       <div className="map" ref={mapRef} />
 
-      <div className="topbar">
-        <div className="brand">
-          <span className="brand__dot" />
-          VoTek
-        </div>
-        <div className={`pill ${geo.error ? 'error' : geo.position ? 'live' : ''}`}>
-          <span className="dot" />
-          {geo.error
-            ? 'GPS off'
-            : geo.position
-              ? `GPS · ±${Math.round(geo.accuracy ?? 0)}m`
-              : 'Locating…'}
-        </div>
-      </div>
+      {showInsecure && <InsecureBanner onDismiss={() => setShowInsecure(false)} />}
 
-      <button className="fab" onClick={recenter} aria-label="Recenter">
-        ◎
-      </button>
+      <SearchBar
+        results={results}
+        onSearch={runSearch}
+        onCategory={(q) => runSearch(q, true)}
+        onPick={pickResult}
+        onClear={clearSearch}
+        mode={mode}
+      />
+
+      <MapControls
+        basemap={basemap}
+        onBasemap={(b) => {
+          setBasemap(b)
+          providerRef.current?.setBasemap(b)
+        }}
+        onZoomIn={() => providerRef.current?.zoomIn()}
+        onZoomOut={() => providerRef.current?.zoomOut()}
+        onRecenter={recenter}
+      />
 
       <div className="dock">
-        <div className="dock__row">
-          <button className="guide-btn" onClick={startGuide}>
-            ◐ Start guide
-          </button>
-        </div>
+        <button className="guide-btn" onClick={startGuide}>
+          ◐ Start guide
+        </button>
         <div className="dock__hint">
-          {spots.length} photo spots nearby · point your camera to hear the story
+          {geo.error ? 'GPS off' : geo.position ? `GPS · ±${Math.round(geo.accuracy ?? 0)}m` : 'Locating…'}
+          {' · '}
+          {spots.length} photo spots nearby
         </div>
       </div>
 
       {guideOpen && (
-        <GuideOverlay
-          status={visionStatus}
-          messages={messages}
-          onClose={stopGuide}
-          attachVideo={attachVideo}
-        />
+        <GuideOverlay status={visionStatus} messages={messages} onClose={stopGuide} attachVideo={attachVideo} />
       )}
 
       {selected && (
-        <PhotoSpotSheet
-          spot={selected}
-          onClose={() => setSelected(null)}
-          onNavigate={(s) => {
-            followRef.current = false
-            providerRef.current?.flyTo(s.position, 17)
+        <PlaceSheet
+          target={selected}
+          userPos={geo.position}
+          onClose={() => {
             setSelected(null)
+            providerRef.current?.setSelectedPlace(null)
+          }}
+          onNavigate={(pos) => {
+            followRef.current = false
+            providerRef.current?.flyTo(pos, 17)
+            setSelected(null)
+          }}
+          onGuide={() => {
+            setSelected(null)
+            startGuide()
           }}
         />
       )}

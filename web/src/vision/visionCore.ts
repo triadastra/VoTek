@@ -49,6 +49,11 @@ export class VisionCore {
 
   /** Attach the live camera to a <video> element the UI controls. */
   async startCamera(video: HTMLVideoElement) {
+    // getUserMedia only exists in a secure context (HTTPS or localhost). Off HTTPS,
+    // navigator.mediaDevices is undefined — surface a clear message instead of crashing.
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Camera needs HTTPS. Open this site over https:// (or on localhost).')
+    }
     this.video = video
     this.stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },

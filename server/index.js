@@ -6,6 +6,7 @@ import express from 'express'
 import { WebSocketServer } from 'ws'
 import { GuideSession } from './gemini.js'
 import { reverseGeocode } from './geocode.js'
+import { searchPlaces } from './search.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -35,6 +36,25 @@ app.get('/api/health', (_req, res) => {
 // so the raw key never leaves the server. Stubbed here.
 app.post('/api/session-token', (_req, res) => {
   res.json({ token: null, mode: API_KEY ? 'live' : 'mock' })
+})
+
+// Place / category search, biased to the current map viewport (bbox=w,s,e,n).
+app.get('/api/search', async (req, res) => {
+  const q = String(req.query.q || '')
+  const bbox = req.query.bbox
+    ? String(req.query.bbox).split(',').map(Number).filter((n) => !Number.isNaN(n))
+    : undefined
+  const bounded = req.query.bounded === '1'
+  const results = await searchPlaces(q, { bbox: bbox?.length === 4 ? bbox : undefined, bounded })
+  res.json({ results })
+})
+
+// Reverse geocode a point to a human place name (used by the UI for tapped locations).
+app.get('/api/reverse', async (req, res) => {
+  const lat = Number(req.query.lat)
+  const lng = Number(req.query.lng)
+  const place = await reverseGeocode(lat, lng)
+  res.json({ place })
 })
 
 // In production the broker also serves the built web app, so everything is one origin
