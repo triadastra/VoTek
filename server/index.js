@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import express from 'express'
 import { WebSocketServer } from 'ws'
-import { GuideSession, guideOnce } from './gemini.js'
+import { GuideSession, guideOnce, identify } from './gemini.js'
 import { reverseGeocode } from './geocode.js'
-import { searchPlaces } from './search.js'
+import { searchPlaces, wikiLookup } from './search.js'
 import { getRoute } from './routing.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -52,6 +52,21 @@ app.post('/api/guide', async (req, res) => {
     question: req.body?.question,
   })
   res.json({ text })
+})
+
+// Lens deep-dive: identify what's in view, then web-search it for an image + summary.
+app.post('/api/lens', async (req, res) => {
+  const ctx = req.body?.context || {}
+  let place = ctx.place
+  if (!place && ctx.location) place = await reverseGeocode(ctx.location.lat, ctx.location.lng)
+  const id = await identify({
+    apiKey: API_KEY,
+    context: { ...ctx, place },
+    jpegBase64: req.body?.jpegBase64,
+    question: req.body?.question,
+  })
+  const lens = await wikiLookup(id.subject || req.body?.question || '')
+  res.json({ text: id.answer, lens })
 })
 
 // Place / category search, biased to the current map viewport (bbox=w,s,e,n).

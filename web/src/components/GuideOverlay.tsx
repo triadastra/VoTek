@@ -125,6 +125,13 @@ export function GuideOverlay({
             {status === 'live' ? 'Guide is watching' : status === 'connecting' ? 'Connecting…' : status}
           </div>
         )}
+        <button
+          className="overlay__icbtn"
+          onClick={() => onAsk('What am I looking at right now?')}
+          aria-label="Identify what's in view"
+        >
+          <Icon name="search" size={18} />
+        </button>
         {speechSupported() && (
           <button className="overlay__icbtn" onClick={toggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
             <Icon name={muted ? 'mute' : 'volume'} size={18} />

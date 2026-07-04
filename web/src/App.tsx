@@ -5,7 +5,7 @@ import { FALLBACK_CENTER, useGeolocation } from './location/useGeolocation'
 import { useTrail } from './location/useTrail'
 import { photoSpotsNear } from './data/photoSpots'
 import { getHealth, getRoute, searchPlaces, type RouteResult } from './data/api'
-import { VisionCore, type GuideMessage, type VisionStatus } from './vision/visionCore'
+import { VisionCore, type GuideMessage, type LensData, type VisionStatus } from './vision/visionCore'
 import { warmUpSpeech } from './vision/speech'
 import { SearchBar } from './components/SearchBar'
 import { MapControls } from './components/MapControls'
@@ -14,6 +14,7 @@ import { GuideOverlay } from './components/GuideOverlay'
 import { InsecureBanner } from './components/InsecureBanner'
 import { RouteBanner } from './components/RouteBanner'
 import { TrailChip } from './components/TrailChip'
+import { LensView } from './components/LensView'
 import { Icon } from './ui/Icon'
 
 function haversineM(a: LngLat, b: LngLat): number {
@@ -42,6 +43,10 @@ export default function App() {
   const followRef = useRef(true)
 
   const geo = useGeolocation()
+  const posRef = useRef<LngLat | null>(null)
+  posRef.current = geo.position
+  const lensAnchorRef = useRef<LngLat | null>(null)
+  const [lens, setLens] = useState<LensData | null>(null)
   const [spots, setSpots] = useState<PhotoSpot[]>([])
   const [results, setResults] = useState<Place[]>([])
   const [selected, setSelected] = useState<SheetTarget | null>(null)
@@ -119,6 +124,12 @@ export default function App() {
   useEffect(() => {
     providerRef.current?.setTrail(trail.points.length ? trail.points : null)
   }, [trail.points, mapReady])
+
+  // Close the Lens once the user walks away from where they opened it.
+  useEffect(() => {
+    if (!lens || !lensAnchorRef.current || !geo.position) return
+    if (haversineM(geo.position, lensAnchorRef.current) > 40) setLens(null)
+  }, [geo.position, lens])
 
   const recenter = () => {
     followRef.current = true
@@ -207,6 +218,10 @@ export default function App() {
     const core = new VisionCore({
       onStatus: setVisionStatus,
       onLive: setLiveMode,
+      onLens: (l) => {
+        lensAnchorRef.current = posRef.current // remember where we were, for walk-away close
+        setLens(l)
+      },
       onMessage: (msg) =>
         setMessages((prev) =>
           prev.length && prev[prev.length - 1].partial ? [...prev.slice(0, -1), msg] : [...prev, msg],
@@ -311,6 +326,8 @@ export default function App() {
           onMicMute={(m) => visionRef.current?.setMicMuted(m)}
         />
       )}
+
+      {lens && <LensView lens={lens} onClose={() => setLens(null)} />}
 
       {selected && (
         <PlaceSheet

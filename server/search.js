@@ -73,6 +73,37 @@ function normalize(item) {
   }
 }
 
+// Web lookup for the Lens feature: find a Wikipedia article for a subject and return its
+// summary + lead image. Free, no key.
+export async function wikiLookup(query) {
+  if (!query || !query.trim()) return null
+  try {
+    const s = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch=${encodeURIComponent(query)}`,
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(6000) },
+    )
+    if (!s.ok) return null
+    const sd = await s.json()
+    const title = sd?.query?.search?.[0]?.title
+    if (!title) return null
+    const sum = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!sum.ok) return null
+    const d = await sum.json()
+    return {
+      title: d.title || title,
+      extract: d.extract || '',
+      imageUrl: d.originalimage?.source || d.thumbnail?.source || null,
+      url: d.content_urls?.desktop?.page || `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`,
+      source: 'Wikipedia',
+    }
+  } catch {
+    return null
+  }
+}
+
 /**
  * Free-text or category search, biased to the current map viewport when a bbox is given.
  * @param {string} q query text (a place name or a category like "coffee")

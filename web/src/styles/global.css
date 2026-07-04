@@ -273,6 +273,40 @@ button { font: inherit; cursor: pointer; }
 .insecure__text strong { display: block; margin-bottom: 2px; }
 .insecure__x { border: none; background: rgba(255, 255, 255, 0.15); color: #fff; width: 24px; height: 24px; border-radius: 50%; }
 
+/* ---- Lens deep-dive (white split focus screen) ---- */
+.lens {
+  position: absolute; inset: 0; z-index: 40; background: #ffffff; color: #1a2230;
+  display: flex; flex-direction: row;
+}
+.lens__media {
+  flex: 1 1 48%; min-width: 0; background: #f2f4f8;
+  display: grid; place-items: center; overflow: hidden;
+}
+.lens__media img { width: 100%; height: 100%; object-fit: contain; }
+.lens__noimg { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #9aa6b8; font-size: 13px; }
+.lens__panel {
+  flex: 1 1 52%; min-width: 0; position: relative;
+  padding: calc(var(--safe-top) + 24px) 22px calc(var(--safe-bottom) + 22px);
+  overflow-y: auto; display: flex; flex-direction: column;
+}
+.lens__close {
+  position: absolute; top: calc(var(--safe-top) + 14px); right: 16px;
+  width: 40px; height: 40px; border-radius: 50%; border: none;
+  background: rgba(20,30,50,0.07); color: #1a2230; display: grid; place-items: center;
+}
+.lens__tag { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent); }
+.lens__title { margin: 6px 0 12px; font-size: 26px; font-weight: 800; line-height: 1.15; }
+.lens__answer { font-size: 17px; line-height: 1.5; margin: 0 0 14px; }
+.lens__extract { font-size: 15px; line-height: 1.55; color: #46536a; margin: 0; }
+.lens__foot { margin-top: auto; padding-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.lens__source { color: var(--brand); font-weight: 700; font-size: 14px; text-decoration: none; }
+.lens__hint { font-size: 12px; color: #9aa6b8; }
+@media (max-width: 640px) {
+  .lens { flex-direction: column; }
+  .lens__media { flex: 0 0 42%; }
+  .lens__panel { flex: 1 1 auto; }
+}
+
 /* ---- Guide overlay (camera + transcript) ---- */
 .overlay { position: absolute; inset: 0; z-index: 20; background: #000; display: flex; flex-direction: column; }
 .overlay__video { flex: 1; width: 100%; object-fit: cover; }

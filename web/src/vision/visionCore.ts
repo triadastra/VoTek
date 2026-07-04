@@ -14,12 +14,24 @@ export interface GuideMessage {
   speak?: boolean
 }
 
+export interface LensData {
+  title: string
+  extract: string
+  imageUrl: string | null
+  url: string
+  source: string
+  question?: string
+  answer?: string
+}
+
 export interface VisionCoreEvents {
   onStatus?: (status: VisionStatus) => void
   onMessage?: (msg: GuideMessage) => void
   onError?: (err: string) => void
   /** Fired when we learn whether this is a live Gemini-audio session. */
   onLive?: (live: boolean) => void
+  /** Fired when a Lens deep-dive result (image + summary) is available. */
+  onLens?: (lens: LensData) => void
 }
 
 export type VisionStatus = 'idle' | 'connecting' | 'live' | 'error'
@@ -188,21 +200,27 @@ export class VisionCore {
     this.send({ type: 'context', context })
   }
 
-  /** Ask the guide a spoken question about what's in view. Answered via HTTP for reliability. */
+  /**
+   * Ask about what's in view. Runs the Lens pipeline: identify + web lookup, so the answer can
+   * come with a reference image. Works in every mode (HTTP), independent of the live socket.
+   */
   async ask(question: string) {
     const q = question.trim()
     if (!q) return
     this.events.onMessage?.({ role: 'you', text: q })
     this.httpBusy = true // pause ambient narration while answering
     try {
-      const res = await fetch('/api/guide', {
+      const res = await fetch('/api/lens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context: this.context, jpegBase64: this.captureFrame(), question: q }),
       })
       if (res.ok) {
-        const { text } = await res.json()
+        const { text, lens } = await res.json()
         if (text) this.events.onMessage?.({ role: 'guide', text })
+        if (lens && (lens.imageUrl || lens.extract)) {
+          this.events.onLens?.({ ...lens, question: q, answer: text })
+        }
       }
     } catch {
       this.events.onMessage?.({ role: 'guide', text: '(couldn’t reach the guide just now)' })

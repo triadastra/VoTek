@@ -76,6 +76,51 @@ export async function guideOnce({ apiKey, context, jpegBase64, question }) {
   }
 }
 
+// Identify what the user is asking about in the frame — returns a searchable subject plus a
+// short spoken answer. Powers the Lens deep-dive (subject → Wikipedia image + summary).
+export async function identify({ apiKey, context, jpegBase64, question }) {
+  const q = (question || 'What am I looking at?').trim()
+  if (!apiKey) {
+    return { subject: q, answer: `Let me pull up what I can find about "${q}".` }
+  }
+  try {
+    const parts = [
+      {
+        text:
+          buildSystemPrompt(context) +
+          `\nThe user asks: "${q}". Identify the specific subject in view (an artwork, landmark, ` +
+          `plant, building, object). Reply ONLY as compact JSON: ` +
+          `{"subject":"<short searchable name>","answer":"<1-3 sentence spoken answer>"}`,
+      },
+    ]
+    if (jpegBase64) parts.push({ inline_data: { mime_type: 'image/jpeg', data: jpegBase64 } })
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${REST_MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts }] }),
+        signal: AbortSignal.timeout(15000),
+      },
+    )
+    if (!res.ok) return { subject: q, answer: `(couldn’t identify: ${res.status})` }
+    const data = await res.json()
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('') || ''
+    const m = text.match(/\{[\s\S]*\}/)
+    if (m) {
+      try {
+        const j = JSON.parse(m[0])
+        return { subject: j.subject || q, answer: j.answer || text }
+      } catch {
+        /* fall through */
+      }
+    }
+    return { subject: q, answer: text || 'Here is what I found.' }
+  } catch (e) {
+    return { subject: q, answer: `(couldn’t identify: ${e.message})` }
+  }
+}
+
 /**
  * A single guide session. Wraps either a real Gemini Live connection or a mock generator.
  * The client-facing contract is identical: call pushContext(), pushFrame(), and receive
