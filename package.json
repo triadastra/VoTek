@@ -1,0 +1,10 @@
+{
+  "name": "votek",
+  "private": true,
+  "description": "VoTek — voice-guided map tour. Monorepo: web/ (Vite+React front end) + server/ (Express/ws broker that serves the built web). The root orchestrates a one-command install/build/run so the app deploys with no extra config.",
+  "scripts": {
+    "init": "npm --prefix server install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund && npm --prefix web run build",
+    "dev": "node server/index.js",
+    "start": "node server/index.js"
+  }
+}
