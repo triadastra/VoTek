@@ -3,26 +3,61 @@ import 'maplibre-gl/dist/maplibre-gl.css' // bundled into the lazy map chunk, no
 import type { Basemap, Bounds, LngLat, MapProvider, MapProviderOptions, Place, PhotoSpot } from './types'
 import { iconSvg, type IconName } from '../ui/icons'
 
-// CARTO Voyager — a clean, free, key-less basemap that reads like Google Maps.
-// ESRI World Imagery — free satellite tiles. Both toggled via layer visibility.
-const CARTO = ['a', 'b', 'c', 'd'].map(
+// CARTO Voyager **vector** style — free, key-less, and renders client-side, so labels and
+// roads stay razor-sharp at every zoom and on retina screens (the raster tiles it replaces
+// were pre-baked 256px PNGs, which is why the map looked blurry). If the style fetch fails
+// (offline, blocked CDN) we fall back to those same raster tiles so the map still works.
+// ESRI World Imagery — free satellite tiles, toggled via layer visibility.
+const VECTOR_STYLE_URL = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
+const CARTO_RASTER = ['a', 'b', 'c', 'd'].map(
   (s) => `https://${s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png`,
 )
 const SATELLITE = [
   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
 ]
 
-const BASE_STYLE: maplibregl.StyleSpecification = {
+const SATELLITE_SOURCE: maplibregl.RasterSourceSpecification = {
+  type: 'raster',
+  tiles: SATELLITE,
+  tileSize: 256,
+  attribution: 'Imagery © Esri',
+}
+const SATELLITE_LAYER: maplibregl.RasterLayerSpecification = {
+  id: 'satellite',
+  type: 'raster',
+  source: 'satellite',
+  layout: { visibility: 'none' },
+}
+
+const RASTER_FALLBACK: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
-    carto: { type: 'raster', tiles: CARTO, tileSize: 256, attribution: '© OpenStreetMap, © CARTO' },
-    satellite: { type: 'raster', tiles: SATELLITE, tileSize: 256, attribution: 'Imagery © Esri' },
+    carto: { type: 'raster', tiles: CARTO_RASTER, tileSize: 256, attribution: '© OpenStreetMap, © CARTO' },
+    satellite: SATELLITE_SOURCE,
   },
   layers: [
     { id: 'bg', type: 'background', paint: { 'background-color': '#eef1f5' } },
     { id: 'carto', type: 'raster', source: 'carto' },
-    { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } },
+    SATELLITE_LAYER,
   ],
+}
+
+// Fetch the vector style and splice the satellite source/layer into it, remembering which
+// layer ids belong to the basemap so setBasemap() can flip the whole set at once.
+async function loadBaseStyle(): Promise<{ style: maplibregl.StyleSpecification; baseLayerIds: string[] }> {
+  try {
+    const res = await fetch(VECTOR_STYLE_URL)
+    if (!res.ok) throw new Error(`style ${res.status}`)
+    const style = (await res.json()) as maplibregl.StyleSpecification
+    const baseLayerIds = style.layers
+      .filter((l) => !('layout' in l) || l.layout?.visibility !== 'none')
+      .map((l) => l.id)
+    style.sources.satellite = SATELLITE_SOURCE
+    style.layers.push(SATELLITE_LAYER)
+    return { style, baseLayerIds }
+  } catch {
+    return { style: RASTER_FALLBACK, baseLayerIds: ['bg', 'carto'] }
+  }
 }
 
 const ACCURACY_SOURCE = 'gps-accuracy'
@@ -109,9 +144,10 @@ function iconFor(category?: string): IconName {
 }
 
 export async function createMapLibreProvider(opts: MapProviderOptions): Promise<MapProvider> {
+  const { style, baseLayerIds } = await loadBaseStyle()
   const map = new MlMap({
     container: opts.container,
-    style: BASE_STYLE,
+    style,
     center: [opts.center.lng, opts.center.lat],
     zoom: opts.zoom,
     attributionControl: { compact: true },
@@ -332,8 +368,9 @@ export async function createMapLibreProvider(opts: MapProviderOptions): Promise<
       })
     },
     setBasemap(kind: Basemap) {
-      map.setLayoutProperty('satellite', 'visibility', kind === 'satellite' ? 'visible' : 'none')
-      map.setLayoutProperty('carto', 'visibility', kind === 'satellite' ? 'none' : 'visible')
+      const sat = kind === 'satellite'
+      map.setLayoutProperty('satellite', 'visibility', sat ? 'visible' : 'none')
+      for (const id of baseLayerIds) map.setLayoutProperty(id, 'visibility', sat ? 'none' : 'visible')
     },
     zoomIn() {
       map.zoomIn()

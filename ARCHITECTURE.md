@@ -17,6 +17,9 @@ are, narrates the history of what you're looking at, and circles the best spots 
 
 The map is deliberately behind a small interface (`web/src/map/types.ts`). Today the only
 implementation is **MapLibre GL** — free, open-source, no account or key required to start.
+The default basemap is the **CARTO Voyager vector style** (key-less, renders client-side so
+labels and roads stay crisp at every zoom), with the raster Voyager tiles as an automatic
+fallback if the style CDN is unreachable, and ESRI World Imagery for the satellite toggle.
 Apple **MapKit JS** or **Google Maps** can be added as alternate providers later (both need a
 paid/billing account and a token server) without touching the rest of the app. The interesting,
 hard parts — vision, narration, photo logic — are all map-agnostic.
