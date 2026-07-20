@@ -105,7 +105,7 @@ export default function App() {
   useEffect(() => {
     let disposed = false
     if (!mapRef.current) return
-    getMapProvider('maplibre').then((factory) => {
+    getMapProvider().then((factory) => {
       if (disposed || !mapRef.current) return
       factory({ container: mapRef.current, center, zoom: 15 }).then((p) => {
         if (disposed) {

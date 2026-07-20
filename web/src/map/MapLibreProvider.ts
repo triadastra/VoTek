@@ -1,7 +1,8 @@
 import maplibregl, { Map as MlMap, GeoJSONSource, Marker } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css' // bundled into the lazy map chunk, not the initial CSS
 import type { Basemap, Bounds, LngLat, MapProvider, MapProviderOptions, Place, PhotoSpot } from './types'
-import { iconSvg, type IconName } from '../ui/icons'
+import { iconFor, smooth } from './shared'
+import { iconSvg } from '../ui/icons'
 
 // CARTO Voyager **vector** style — free, key-less, and renders client-side, so labels and
 // roads stay razor-sharp at every zoom and on retina screens (the raster tiles it replaces
@@ -65,41 +66,6 @@ const SPOTS_SOURCE = 'photo-spots'
 const ROUTE_SOURCE = 'route'
 const TRAIL_SOURCE = 'trail'
 
-// Catmull-Rom spline → denser polyline, so the breadcrumb trail renders as smooth curves
-// instead of straight zig-zags between the 3-second sample points.
-function smooth(points: LngLat[], steps = 10): [number, number][] {
-  if (points.length < 3) return points.map((p) => [p.lng, p.lat])
-  const out: [number, number][] = []
-  const pt = (i: number) => points[Math.max(0, Math.min(points.length - 1, i))]
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = pt(i - 1)
-    const p1 = pt(i)
-    const p2 = pt(i + 1)
-    const p3 = pt(i + 2)
-    for (let s = 0; s < steps; s++) {
-      const t = s / steps
-      const t2 = t * t
-      const t3 = t2 * t
-      const lng =
-        0.5 *
-        (2 * p1.lng +
-          (-p0.lng + p2.lng) * t +
-          (2 * p0.lng - 5 * p1.lng + 4 * p2.lng - p3.lng) * t2 +
-          (-p0.lng + 3 * p1.lng - 3 * p2.lng + p3.lng) * t3)
-      const lat =
-        0.5 *
-        (2 * p1.lat +
-          (-p0.lat + p2.lat) * t +
-          (2 * p0.lat - 5 * p1.lat + 4 * p2.lat - p3.lat) * t2 +
-          (-p0.lat + 3 * p1.lat - 3 * p2.lat + p3.lat) * t3)
-      out.push([lng, lat])
-    }
-  }
-  const last = points[points.length - 1]
-  out.push([last.lng, last.lat])
-  return out
-}
-
 function circlePolygon(center: LngLat, radiusM: number, steps = 48): GeoJSON.Feature {
   const coords: [number, number][] = []
   const earth = 6378137
@@ -122,25 +88,6 @@ function spotsFC(spots: PhotoSpot[]): GeoJSON.FeatureCollection {
       properties: { id: s.id, score: s.score },
     })),
   }
-}
-
-const CATEGORY_ICON: Record<string, IconName> = {
-  restaurant: 'food',
-  cafe: 'coffee',
-  coffee: 'coffee',
-  bar: 'bar',
-  hotel: 'hotel',
-  lodging: 'hotel',
-  museum: 'museum',
-  park: 'park',
-  viewpoint: 'camera',
-  attraction: 'star',
-}
-
-function iconFor(category?: string): IconName {
-  if (!category) return 'pin'
-  const key = Object.keys(CATEGORY_ICON).find((k) => category.toLowerCase().includes(k))
-  return key ? CATEGORY_ICON[key] : 'pin'
 }
 
 export async function createMapLibreProvider(opts: MapProviderOptions): Promise<MapProvider> {
