@@ -20,3 +20,9 @@ services:
         sync: false # set in the dashboard; never committed
       - key: GEMINI_MODEL
         value: gemini-2.0-flash-live-001
+      # Optional Google Maps basemap. Vite reads these at web build time (Render exposes
+      # env vars to Docker builds). Leave unset to use the free key-less MapLibre map.
+      - key: VITE_MAP_BACKEND
+        sync: false # set to "google" in the dashboard to enable
+      - key: VITE_GOOGLE_MAPS_KEY
+        sync: false # browser key — restrict to your onrender.com URL; never committed
