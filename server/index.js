@@ -34,11 +34,27 @@ const KEYS = {
   anthropic: process.env.ANTHROPIC_API_KEY || '',
 }
 
+// Map config — lets the web app pick its basemap at runtime from this one .env, instead of
+// baking keys into the client build. GOOGLE_MAPS_KEY is a *browser* key (it is sent to every
+// client on purpose), so it must be referrer-restricted in the Google Cloud console.
+const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY || ''
+const GOOGLE_MAP_ID = process.env.GOOGLE_MAP_ID || ''
+const MAP_BACKEND = process.env.MAP_BACKEND || (GOOGLE_MAPS_KEY ? 'google' : 'maplibre')
+
 const app = express()
 // Gzip everything (the built JS bundle is ~1MB raw → ~280KB gzipped). Without this the
 // broker shipped the whole bundle uncompressed, which was the main cause of slow loads.
 app.use(compression())
 app.use(express.json({ limit: '6mb' })) // frames arrive as base64 JPEG
+
+// Which basemap the client should use. Setting GOOGLE_MAPS_KEY in server/.env switches the
+// app to Google Maps; leave it empty for the free key-less MapLibre stack.
+app.get('/api/mapconfig', (_req, res) => {
+  if (MAP_BACKEND === 'google' && GOOGLE_MAPS_KEY) {
+    return res.json({ backend: 'google', googleMapsKey: GOOGLE_MAPS_KEY, googleMapId: GOOGLE_MAP_ID || undefined })
+  }
+  res.json({ backend: 'maplibre' })
+})
 
 // Which AI providers are available (have a key) + their model lists, for the client selector.
 app.get('/api/providers', (_req, res) => {

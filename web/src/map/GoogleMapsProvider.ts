@@ -1,8 +1,9 @@
 /// <reference types="google.maps" />
-// Google Maps JS implementation of the MapProvider interface. Requires a browser key in
-// VITE_GOOGLE_MAPS_KEY (put it in web/.env.local — never commit it) with billing enabled
-// and the Maps JavaScript API turned on. The key ships in the client bundle by design,
-// so it MUST be restricted to your domain (HTTP referrers) in the Google Cloud console.
+// Google Maps JS implementation of the MapProvider interface. The browser key arrives via
+// createMapProvider (normally from GOOGLE_MAPS_KEY in server/.env, served by /api/mapconfig).
+// It needs billing enabled and the Maps JavaScript API turned on, and since every client
+// receives it by design, it MUST be restricted to your domain (HTTP referrers) in the
+// Google Cloud console.
 import type { Basemap, Bounds, MapProvider, MapProviderOptions, Place, PhotoSpot } from './types'
 import { iconFor, smooth } from './shared'
 import { iconSvg } from '../ui/icons'
@@ -56,17 +57,21 @@ function centered(el: HTMLElement): HTMLElement {
   return wrap
 }
 
-export async function createGoogleMapsProvider(opts: MapProviderOptions): Promise<MapProvider> {
-  const key = import.meta.env.VITE_GOOGLE_MAPS_KEY
-  if (!key) throw new Error('VITE_GOOGLE_MAPS_KEY is not set')
-  await loadGoogleMaps(key)
+export interface GoogleMapsConfig {
+  key: string
+  mapId?: string
+}
+
+export async function createGoogleMapsProvider(opts: MapProviderOptions, cfg: GoogleMapsConfig): Promise<MapProvider> {
+  if (!cfg.key) throw new Error('Google Maps key is not configured')
+  await loadGoogleMaps(cfg.key)
   const { AdvancedMarkerElement } = (await google.maps.importLibrary('marker')) as google.maps.MarkerLibrary
 
   const map = new google.maps.Map(opts.container, {
     center: { lat: opts.center.lat, lng: opts.center.lng },
     zoom: opts.zoom,
     // Advanced markers need a map id; the default styling one works without console setup.
-    mapId: import.meta.env.VITE_GOOGLE_MAP_ID || 'DEMO_MAP_ID',
+    mapId: cfg.mapId || 'DEMO_MAP_ID',
     disableDefaultUI: true, // our own UI supplies all controls — no default map chrome
     clickableIcons: false,
     gestureHandling: 'greedy',

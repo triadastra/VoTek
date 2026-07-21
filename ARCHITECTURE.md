@@ -22,10 +22,11 @@ labels and roads stay crisp at every zoom), with the raster Voyager tiles as an 
 fallback if the style CDN is unreachable, and ESRI World Imagery for the satellite toggle.
 
 A **Google Maps** provider also exists (`web/src/map/GoogleMapsProvider.ts`). Enable it by
-copying `web/.env.example` to `web/.env.local` and setting `VITE_MAP_BACKEND=google` plus a
-`VITE_GOOGLE_MAPS_KEY` (needs a Google Cloud project with billing and the Maps JavaScript
-API enabled; restrict the key to your domain — it ships in the client bundle). If the Google
-script fails to load at runtime, the app automatically falls back to MapLibre.
+setting `GOOGLE_MAPS_KEY` in `server/.env` — the broker serves it to the web app via
+`/api/mapconfig` at runtime, so one .env file configures everything and no rebuild is needed
+(the key needs a Google Cloud project with billing and the Maps JavaScript API enabled;
+restrict it to your domain — every visitor's browser receives it). If Google fails to load,
+the app automatically falls back to MapLibre.
 Apple **MapKit JS** or **Google Maps** can be added as alternate providers later (both need a
 paid/billing account and a token server) without touching the rest of the app. The interesting,
 hard parts — vision, narration, photo logic — are all map-agnostic.
